@@ -6,6 +6,9 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.JsonReader
 import android.util.JsonWriter
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.io.EOFException
 import java.time.Instant
 
 /** Persistent, process-safe corpus used by advanced search. */
@@ -171,6 +174,57 @@ internal object AdvancedSearchIndex {
         writer.endArray()
     }
 
+    /** Fast, unescaped representation used by portable archive backups. */
+    @Synchronized
+    fun writeBinaryExport(output: DataOutputStream) {
+        output.writeInt(BinaryMagic)
+        output.writeInt(BinaryVersion)
+        database?.readableDatabase?.query(
+            "posts",
+            arrayOf("payload", "post_vote", "poll_vote", "likert_vote", "pick_vote"),
+            null, null, null, null, "created_at DESC",
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                output.writeSizedString(cursor.getString(0))
+                output.writeNullableInt(if (cursor.isNull(1)) null else cursor.getInt(1))
+                output.writeNullableInt(if (cursor.isNull(2)) null else cursor.getInt(2))
+                output.writeNullableInt(if (cursor.isNull(3)) null else cursor.getInt(3))
+                output.writeNullableString(if (cursor.isNull(4)) null else cursor.getString(4))
+            }
+        }
+        output.flush()
+    }
+
+    /** Restores the binary stream in bounded transactions and replaces the old corpus. */
+    @Synchronized
+    fun importBinary(input: DataInputStream) {
+        require(input.readInt() == BinaryMagic) { "Invalid search-index backup" }
+        require(input.readInt() == BinaryVersion) { "Unsupported search-index backup version" }
+        clear()
+        val payloads = ArrayList<String>(500)
+        val postVotes = HashMap<String, Int>(); val pollVotes = HashMap<String, Int>()
+        val likertVotes = HashMap<String, Int>(); val pickVotes = HashMap<String, String>()
+        fun flush() {
+            if (payloads.isEmpty()) return
+            merge(payloads, postVotes, pollVotes, likertVotes, pickVotes)
+            payloads.clear(); postVotes.clear(); pollVotes.clear(); likertVotes.clear(); pickVotes.clear()
+        }
+        while (true) {
+            val payload = try { input.readSizedString() } catch (_: EOFException) { break }
+            val uuid = runCatching { org.json.JSONObject(payload).optString("uuid") }.getOrNull().orEmpty()
+            val postVote = input.readNullableInt(); val pollVote = input.readNullableInt()
+            val likertVote = input.readNullableInt(); val pickVote = input.readNullableString()
+            if (uuid.isBlank()) continue
+            payloads += payload
+            postVote?.let { postVotes[uuid] = it }
+            pollVote?.takeIf { it >= 0 }?.let { pollVotes[uuid] = it }
+            likertVote?.takeIf { it >= 0 }?.let { likertVotes[uuid] = it }
+            pickVote?.takeIf(String::isNotBlank)?.let { pickVotes[uuid] = it }
+            if (payloads.size >= 500) flush()
+        }
+        flush()
+    }
+
     /**
      * Imports a streamed backup in small transactions. This avoids materializing a
      * potentially tens-of-thousands-row search corpus as one JSONArray in memory.
@@ -251,7 +305,36 @@ internal object AdvancedSearchIndex {
             }
         }
     }
+
+    private const val BinaryMagic = 0x32434958 // "2CIX"
+    private const val BinaryVersion = 1
 }
+
+private fun DataOutputStream.writeSizedString(value: String) {
+    val bytes = value.toByteArray(Charsets.UTF_8)
+    writeInt(bytes.size)
+    write(bytes)
+}
+
+private fun DataInputStream.readSizedString(): String {
+    val size = readInt()
+    require(size in 0..(8 * 1024 * 1024)) { "Invalid search-index row size" }
+    return ByteArray(size).also(::readFully).toString(Charsets.UTF_8)
+}
+
+private fun DataOutputStream.writeNullableInt(value: Int?) {
+    writeBoolean(value != null)
+    if (value != null) writeInt(value)
+}
+
+private fun DataInputStream.readNullableInt(): Int? = if (readBoolean()) readInt() else null
+
+private fun DataOutputStream.writeNullableString(value: String?) {
+    writeBoolean(value != null)
+    if (value != null) writeSizedString(value)
+}
+
+private fun DataInputStream.readNullableString(): String? = if (readBoolean()) readSizedString() else null
 
 private fun JsonReader.readJsonObject(): org.json.JSONObject {
     val output = org.json.JSONObject()

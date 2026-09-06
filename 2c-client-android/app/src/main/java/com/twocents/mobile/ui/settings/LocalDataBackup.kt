@@ -16,6 +16,8 @@ import com.twocents.mobile.ui.profile.FollowersScanStore
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.BufferedReader
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -25,6 +27,8 @@ import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -54,6 +58,21 @@ internal data class ImportedLocalData(
 )
 
 private data class DraftMediaEntry(val archivePath: String, val source: Uri)
+private data class PreparedDraftArchive(
+    val drafts: String?,
+    val media: List<DraftMediaEntry>,
+    val skippedMedia: Int,
+)
+internal data class LocalDataExportResult(val skippedDraftMedia: Int)
+
+/** Serializes destructive/storage-heavy operations across Settings instances. */
+internal object LocalDataOperation {
+    private val mutableActive = MutableStateFlow<String?>(null)
+    val active = mutableActive.asStateFlow()
+
+    fun tryStart(label: String): Boolean = mutableActive.compareAndSet(null, label)
+    fun finish() { mutableActive.value = null }
+}
 
 /**
  * Writes a portable archive rather than embedding binary media in JSON. Search rows
@@ -65,8 +84,8 @@ internal fun exportLocalData(
     destination: Uri,
     userUuid: String,
     state: LocalDataExportState,
-) {
-    val (drafts, draftMedia) = prepareDraftArchive(context)
+): LocalDataExportResult {
+    val preparedDrafts = prepareDraftArchive(context)
     val descriptor = context.contentResolver.openFileDescriptor(destination, "rwt")
         ?: error("Couldn't open the selected file")
     descriptor.use { parcel ->
@@ -75,18 +94,17 @@ internal fun exportLocalData(
             // deflate work keeps video-heavy backups quick and lets import stage all
             // attachments before it mutates the local data stores.
             zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
-            draftMedia.forEach { media ->
+            preparedDrafts.media.forEach { media ->
                 zip.putNextEntry(ZipEntry(media.archivePath))
                 context.contentResolver.openInputStream(media.source)?.use { it.copyTo(zip, 64 * 1024) }
                     ?: error("A draft attachment could not be read")
                 zip.closeEntry()
             }
 
-            zip.setLevel(java.util.zip.Deflater.BEST_SPEED)
             zip.putNextEntry(ZipEntry(BACKUP_MANIFEST))
             val writer = JsonWriter(OutputStreamWriter(zip, Charsets.UTF_8))
             writer.beginObject()
-            writer.name("version").value(3L)
+            writer.name("version").value(4L)
             writer.name("offline").value(state.offline)
             writer.name("verified_only").value(state.verifiedOnly)
             writer.name("auto_like_own_content").value(state.autoLikeOwnContent)
@@ -95,19 +113,24 @@ internal fun exportLocalData(
             writer.name("haptic_feedback").value(state.haptics)
             writer.name("notification_preferences").value(NotificationPreferences.exportJson(context).toString())
             writer.name("muted").beginArray(); state.muted.forEach(writer::value); writer.endArray()
-            writer.name("search_posts"); AdvancedSearchIndex.writeExport(writer)
+            writer.name("search_index_entry").value(SEARCH_INDEX)
             writer.name("activity_stats").value(NotificationHistoryStore(context, userUuid).exportJson().toString())
             writer.name("followers_scan").value(FollowersScanStore(context, userUuid).exportJson().toString())
             writer.name("gif_library").beginObject()
             writer.name("saved").beginArray(); GifLibrary.saved(context).take(200).forEach(writer::value); writer.endArray()
             writer.name("favorites").beginArray(); GifLibrary.favorites(context).take(200).forEach(writer::value); writer.endArray()
             writer.endObject()
-            writer.name("drafts"); if (drafts == null) writer.nullValue() else writer.value(drafts)
+            writer.name("drafts"); if (preparedDrafts.drafts == null) writer.nullValue() else writer.value(preparedDrafts.drafts)
             writer.endObject()
             writer.flush()
             zip.closeEntry()
+
+            zip.putNextEntry(ZipEntry(SEARCH_INDEX))
+            AdvancedSearchIndex.writeBinaryExport(DataOutputStream(zip))
+            zip.closeEntry()
         }
     }
+    return LocalDataExportResult(preparedDrafts.skippedMedia)
 }
 
 /** Accepts both the portable v3 archive and legacy JSON-only backups. */
@@ -138,6 +161,7 @@ private fun importArchive(context: Context, input: InputStream): ImportedLocalDa
                     entry.name == BACKUP_MANIFEST -> {
                         imported = readManifest(JsonReader(InputStreamReader(zip, Charsets.UTF_8)))
                     }
+                    entry.name == SEARCH_INDEX -> AdvancedSearchIndex.importBinary(DataInputStream(zip))
                     entry.name.startsWith("$DRAFT_MEDIA/") && !entry.isDirectory -> {
                         val name = entry.name.substringAfterLast('/').takeIf { it.isNotBlank() }
                             ?: error("Invalid draft attachment entry")
@@ -208,34 +232,41 @@ private fun readManifest(reader: JsonReader): ImportedLocalData {
         notificationPreferences, activityStats, followersScan, gifLibrary, drafts)
 }
 
-private fun prepareDraftArchive(context: Context): Pair<String?, List<DraftMediaEntry>> {
+private fun prepareDraftArchive(context: Context): PreparedDraftArchive {
     val draftFile = File(context.filesDir, "compose-drafts/drafts.json")
-    if (!draftFile.isFile) return null to emptyList()
+    if (!draftFile.isFile) return PreparedDraftArchive(null, emptyList(), 0)
     val drafts = JSONArray(draftFile.readText())
     val media = mutableListOf<DraftMediaEntry>()
-    val mapped = mutableMapOf<String, String>()
+    val mapped = mutableMapOf<String, String?>()
+    var skipped = 0
     for (draftIndex in 0 until drafts.length()) {
         val draft = drafts.optJSONObject(draftIndex)?.optJSONObject("draft") ?: continue
         val uris = draft.optJSONArray("mediaUris") ?: continue
+        val portableUris = JSONArray()
         for (mediaIndex in 0 until uris.length()) {
             val raw = uris.optString(mediaIndex)
-            if (raw.isBlank() || raw.startsWith("http://") || raw.startsWith("https://")) continue
-            val restoredUri = mapped.getOrPut(raw) {
+            if (raw.isBlank()) continue
+            if (raw.startsWith("http://") || raw.startsWith("https://")) {
+                portableUris.put(raw)
+                continue
+            }
+            val restoredUri = if (mapped.containsKey(raw)) mapped[raw] else runCatching {
                 val source = Uri.parse(raw)
+                // Validate old picker grants before adding an archive entry. An
+                // already-expired grant cannot be recovered, but it must not prevent
+                // every other local setting and draft from being backed up.
+                context.contentResolver.openInputStream(source)?.use { } ?: error("Unreadable draft attachment")
                 val extension = mediaExtension(context, source)
                 val name = "${UUID.randomUUID()}${extension.takeIf(String::isNotBlank)?.let { ".$it" }.orEmpty()}"
                 val target = File(context.filesDir, "compose-drafts/restored-media/$name")
-                val archivePath = "$DRAFT_MEDIA/$name"
-                // Opening now makes a broken/expired picker grant fail the export instead
-                // of producing a backup that only appears to contain the attachment.
-                context.contentResolver.openInputStream(source)?.use { } ?: error("A draft attachment could not be read")
-                media += DraftMediaEntry(archivePath, source)
+                media += DraftMediaEntry("$DRAFT_MEDIA/$name", source)
                 FileProvider.getUriForFile(context, "${context.packageName}.files", target).toString()
-            }
-            uris.put(mediaIndex, restoredUri)
+            }.getOrNull().also { mapped[raw] = it }
+            if (restoredUri == null) skipped++ else portableUris.put(restoredUri)
         }
+        draft.put("mediaUris", portableUris)
     }
-    return drafts.toString() to media
+    return PreparedDraftArchive(drafts.toString(), media, skipped)
 }
 
 private fun mediaExtension(context: Context, uri: Uri): String {
@@ -270,3 +301,4 @@ private fun JsonReader.readGifLibrary(): JSONObject {
 
 private const val BACKUP_MANIFEST = "backup.json"
 private const val DRAFT_MEDIA = "draft-media"
+private const val SEARCH_INDEX = "search-index.bin"

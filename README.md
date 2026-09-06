@@ -12,7 +12,7 @@ The goal is a more polished Android experience: lightweight, fast, data-consciou
 
 ## Current status
 
-Latest Android release: **v0.1.1**.
+Latest Android release: **v0.1.2**.
 
 The Android client supports the functionality of the official twocents application with the current exceptions of creating transactions and budgets. Those features are not currently available to the developer in the EU, which means their behavior and API contracts cannot yet be tested or implemented reliably. They will be added as soon as access makes a correct implementation possible.
 

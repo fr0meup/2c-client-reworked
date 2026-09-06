@@ -22,7 +22,7 @@ captures/
 *.dex
 *.class
 
-# Signing material (never commit private keys)
+# Signing material
 *.jks
 *.keystore
 *.p12

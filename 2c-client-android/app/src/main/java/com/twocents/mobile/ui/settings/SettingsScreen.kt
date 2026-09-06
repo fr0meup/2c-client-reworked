@@ -108,9 +108,14 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
     var inAppExpanded by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf<String?>(null) }
+    val storageOperation by LocalDataOperation.active.collectAsState()
     val view = androidx.compose.ui.platform.LocalView.current
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        if (!LocalDataOperation.tryStart("Exporting data")) {
+            AppToast.error("${LocalDataOperation.active.value ?: "A storage operation"} is already in progress")
+            return@rememberLauncherForActivityResult
+        }
         val offlineForExport = offline
         val verifiedForExport = verifiedOnly
         val autoLikeForExport = autoLikeOwnContent
@@ -122,8 +127,9 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
             // This process-lived IO scope survives leaving Settings. The UI remains
             // interactive and the pinned toast is replaced only by a terminal result.
             val toastId = AppToast.progress("Exporting local data…")
-            runCatching {
-                exportLocalData(
+            try {
+                runCatching {
+                    exportLocalData(
                     context = context,
                     destination = uri,
                     userUuid = auth.userUuid,
@@ -131,18 +137,32 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                         offlineForExport, verifiedForExport, autoLikeForExport, autoPlayForExport,
                         wifiOnlyForExport, hapticsForExport, mutedForExport,
                     ),
-                )
+                    )
+                }
+                    .onSuccess { result ->
+                    AppToast.success(
+                        if (result.skippedDraftMedia == 0) "Backup exported"
+                        else "Backup exported · ${result.skippedDraftMedia} inaccessible draft attachment${if (result.skippedDraftMedia == 1) "" else "s"} skipped",
+                        toastId,
+                    )
+                    }
+                    .onFailure { AppToast.error(friendlyError(it, "Export failed"), toastId) }
+            } finally {
+                LocalDataOperation.finish()
             }
-                .onSuccess { AppToast.success("Backup exported", toastId) }
-                .onFailure { AppToast.error(friendlyError(it, "Export failed"), toastId) }
         }
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        if (!LocalDataOperation.tryStart("Importing data")) {
+            AppToast.error("${LocalDataOperation.active.value ?: "A storage operation"} is already in progress")
+            return@rememberLauncherForActivityResult
+        }
         scope.launch {
             val toastId = AppToast.progress("Importing local data…")
-            runCatching {
-                val imported = withContext(Dispatchers.IO) { importLocalData(context, uri) }
+            try {
+                runCatching {
+                    val imported = withContext(Dispatchers.IO) { importLocalData(context, uri) }
                 muteStore.all().forEach { muteStore.setMuted(it, false) }
                 imported.muted.forEach { muteStore.setMuted(it, true) }
                 val importedOffline = imported.offline
@@ -182,8 +202,11 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                         java.io.File(draftRoot, "drafts.json").apply { parentFile?.mkdirs(); writeText(drafts) }
                     }
                 }
-            }.onSuccess { AppToast.success("Backup imported", toastId) }
-                .onFailure { AppToast.error(friendlyError(it, "Import failed"), toastId) }
+                }.onSuccess { AppToast.success("Backup imported", toastId) }
+                    .onFailure { AppToast.error(friendlyError(it, "Import failed"), toastId) }
+            } finally {
+                LocalDataOperation.finish()
+            }
         }
     }
 
@@ -346,29 +369,36 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                     AnimatedVisibility(storageExpanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                         Column {
                             SettingsDivider(22.dp)
-                            SettingRow(Icons.Outlined.DeleteSweep, if (confirmClear == "media") "Are you sure?" else "Clear media cache", if (confirmClear == "media") "Tap again to remove downloaded media" else "Remove downloaded thumbnails and images") {
+                            SettingRow(Icons.Outlined.DeleteSweep, if (confirmClear == "media") "Are you sure?" else "Clear media cache", if (confirmClear == "media") "Tap again to remove downloaded media" else "Remove downloaded thumbnails and images", enabled = storageOperation == null) {
                                 if (confirmClear != "media") { AppHaptics.open(view); confirmClear = "media" } else scope.launch {
                                     confirmClear = null
+                                    if (!LocalDataOperation.tryStart("Clearing media cache")) return@launch
                                     val toastId = AppToast.progress("Clearing media cache…")
-                                    runCatching { context.imageLoader.memoryCache?.clear(); withContext(Dispatchers.IO) { context.imageLoader.diskCache?.clear() } }
-                                        .onSuccess { AppToast.success("Media cache cleared", toastId) }
-                                        .onFailure { AppToast.error(friendlyError(it, "Couldn't clear media cache"), toastId) }
+                                    try {
+                                        runCatching { context.imageLoader.memoryCache?.clear(); withContext(Dispatchers.IO) { context.imageLoader.diskCache?.clear() } }
+                                            .onSuccess { AppToast.success("Media cache cleared", toastId) }
+                                            .onFailure { AppToast.error(friendlyError(it, "Couldn't clear media cache"), toastId) }
+                                    } finally { LocalDataOperation.finish() }
                                 }
                             }
-                            SettingRow(Icons.Outlined.ManageSearch, if (confirmClear == "index") "Are you sure?" else "Clear search index", if (confirmClear == "index") "Tap again to remove $searchIndexCount indexed posts" else "$searchIndexCount locally indexed posts") {
+                            SettingRow(Icons.Outlined.ManageSearch, if (confirmClear == "index") "Are you sure?" else "Clear search index", if (confirmClear == "index") "Tap again to remove $searchIndexCount indexed posts" else "$searchIndexCount locally indexed posts", enabled = storageOperation == null) {
                                 if (confirmClear != "index") { AppHaptics.open(view); confirmClear = "index" } else scope.launch {
                                     confirmClear = null
+                                    if (!LocalDataOperation.tryStart("Clearing search index")) return@launch
                                     val toastId = AppToast.progress("Clearing search index…")
-                                    runCatching { withContext(Dispatchers.IO) { AdvancedSearchMemoryIndex.clear() } }
-                                        .onSuccess { searchIndexCount = AdvancedSearchMemoryIndex.count(); AppToast.success("Search index cleared", toastId) }
-                                        .onFailure { AppToast.error(friendlyError(it, "Couldn't clear search index"), toastId) }
+                                    try {
+                                        runCatching { withContext(Dispatchers.IO) { AdvancedSearchMemoryIndex.clear() } }
+                                            .onSuccess { searchIndexCount = AdvancedSearchMemoryIndex.count(); AppToast.success("Search index cleared", toastId) }
+                                            .onFailure { AppToast.error(friendlyError(it, "Couldn't clear search index"), toastId) }
+                                    } finally { LocalDataOperation.finish() }
                                 }
                             }
-                            SettingRow(Icons.Outlined.Download, "Export data", "Back up local app data, drafts and search index") { exportLauncher.launch("twocents-backup.2cbackup") }
+                            SettingRow(Icons.Outlined.Download, "Export data", storageOperation ?: "Back up local app data, drafts and search index", enabled = storageOperation == null) { exportLauncher.launch("twocents-backup.2cbackup") }
                             SettingRow(
                                 Icons.Outlined.Upload,
                                 if (confirmClear == "import") "Are you sure?" else "Import data",
                                 if (confirmClear == "import") "This replaces your current local data and cannot be undone" else "Restore a twocents backup",
+                                enabled = storageOperation == null,
                             ) {
                                 if (confirmClear != "import") {
                                     AppHaptics.open(view)
@@ -378,22 +408,25 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                                     importLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/json", "text/json", "text/plain"))
                                 }
                             }
-                            SettingRow(Icons.Outlined.DeleteForever, if (confirmClear == "local") "Are you sure?" else "Clear local data", if (confirmClear == "local") "Tap again to permanently clear local app data" else "Export a backup first—saved GIFs, drafts and other local-only data can be lost") {
+                            SettingRow(Icons.Outlined.DeleteForever, if (confirmClear == "local") "Are you sure?" else "Clear local data", if (confirmClear == "local") "Tap again to permanently clear local app data" else "Export a backup first—saved GIFs, drafts and other local-only data can be lost", enabled = storageOperation == null) {
                                 if (confirmClear != "local") { AppHaptics.open(view); confirmClear = "local" } else scope.launch {
                                     confirmClear = null
+                                    if (!LocalDataOperation.tryStart("Clearing local data")) return@launch
                                     val toastId = AppToast.progress("Clearing local data…")
-                                    runCatching {
-                                        muteStore.all().forEach { muteStore.setMuted(it, false) }; muted = emptyList(); AdvancedSearchIndex.clear()
-                                        NotificationHistoryStore(context, auth.userUuid).clear()
-                                        FollowersScanner.clearStored(context, auth.userUuid)
-                                        GifLibrary.clear(context)
-                                        InteractionPreferences.setAutoLikeOwnContent(context, true)
-                                        InteractionPreferences.setAutoPlayVideos(context, false)
-                                        InteractionPreferences.setWifiOnlyMedia(context, false)
-                                        withContext(Dispatchers.IO) { java.io.File(context.filesDir, "compose-drafts").deleteRecursively() }
-                                        context.imageLoader.memoryCache?.clear(); withContext(Dispatchers.IO) { context.imageLoader.diskCache?.clear() }
-                                    }.onSuccess { searchIndexCount = AdvancedSearchMemoryIndex.count(); autoLikeOwnContent = true; autoPlayVideos = false; wifiOnlyMedia = false; AppToast.success("Local data cleared", toastId) }
-                                        .onFailure { AppToast.error(friendlyError(it, "Couldn't clear local data"), toastId) }
+                                    try {
+                                        runCatching {
+                                            muteStore.all().forEach { muteStore.setMuted(it, false) }; muted = emptyList(); AdvancedSearchIndex.clear()
+                                            NotificationHistoryStore(context, auth.userUuid).clear()
+                                            FollowersScanner.clearStored(context, auth.userUuid)
+                                            GifLibrary.clear(context)
+                                            InteractionPreferences.setAutoLikeOwnContent(context, true)
+                                            InteractionPreferences.setAutoPlayVideos(context, false)
+                                            InteractionPreferences.setWifiOnlyMedia(context, false)
+                                            withContext(Dispatchers.IO) { java.io.File(context.filesDir, "compose-drafts").deleteRecursively() }
+                                            context.imageLoader.memoryCache?.clear(); withContext(Dispatchers.IO) { context.imageLoader.diskCache?.clear() }
+                                        }.onSuccess { searchIndexCount = AdvancedSearchMemoryIndex.count(); autoLikeOwnContent = true; autoPlayVideos = false; wifiOnlyMedia = false; AppToast.success("Local data cleared", toastId) }
+                                            .onFailure { AppToast.error(friendlyError(it, "Couldn't clear local data"), toastId) }
+                                    } finally { LocalDataOperation.finish() }
                                 }
                             }
                         }
@@ -489,8 +522,9 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
 @Composable private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) = Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp)).background(Color.White.copy(alpha = .028f)).border(.6.dp, Color.White.copy(alpha = .075f), RoundedCornerShape(17.dp)), content = content)
 @Composable private fun SettingsDivider(start: androidx.compose.ui.unit.Dp = 54.dp) = Box(Modifier.fillMaxWidth().padding(start = start, end = 12.dp).height(.6.dp).background(Color.White.copy(alpha = .055f)))
 
-@Composable private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) = Row(
-    Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
+@Composable private fun SettingRow(icon: ImageVector, title: String, subtitle: String, enabled: Boolean = true, onClick: () -> Unit) = Row(
+    Modifier.fillMaxWidth().graphicsLayer { alpha = if (enabled) 1f else .38f }
+        .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
 ) {
     Icon(icon, null, tint = SettingsGold.copy(alpha = .8f), modifier = Modifier.size(19.dp))
