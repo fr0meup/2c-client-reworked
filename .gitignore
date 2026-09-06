@@ -1,0 +1,55 @@
+# Gradle and Kotlin build state
+.gradle/
+.kotlin/
+build/
+**/build/
+
+# Local Android SDK and IDE configuration
+local.properties
+.idea/
+*.iml
+.navigation/
+.externalNativeBuild/
+.cxx/
+captures/
+
+# Compiled and packaged artifacts
+*.apk
+*.aab
+*.apks
+*.idsig
+*.dex
+*.class
+
+# Signing material (never commit private keys)
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+signing.properties
+!signing.properties.example
+
+# Local environment and secret overrides
+.env
+.env.*
+!.env.example
+
+# Diagnostics and temporary files
+*.hprof
+*.log
+hs_err_pid*
+replay_pid*
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Editor and operating-system metadata
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini

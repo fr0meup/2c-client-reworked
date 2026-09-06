@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "926651774326",
+    "project_id": "twocents-46d42",
+    "storage_bucket": "twocents-46d42.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:926651774326:android:a4571528b14eb642ea3657",
+        "android_client_info": {
+          "package_name": "com.twocents.mobile.kotlin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdVjiTb04Px8N-YNeLNCOK0_4xbedpjT8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

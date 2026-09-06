@@ -1,0 +1,7 @@
+# Copy this file to signing.properties and replace every value.
+# signing.properties is ignored by Git and must never be committed.
+# Use an absolute path. Forward slashes also work on Windows.
+storeFile=C:/Users/your-name/.android/2c-release.jks
+storePassword=replace-with-your-keystore-password
+keyAlias=twocents
+keyPassword=replace-with-your-key-password
