@@ -12,7 +12,7 @@ The goal is a more polished Android experience: lightweight, fast, data-consciou
 
 ## Current status
 
-Latest Android release: **v0.1.2**.
+Latest Android release: **v0.1.3**. See the [release notes](https://github.com/fr0meup/2c-client-reworked/releases/tag/v0.1.3) for details.
 
 The Android client supports the functionality of the official twocents application with the current exceptions of creating transactions and budgets. Those features are not currently available to the developer in the EU, which means their behavior and API contracts cannot yet be tested or implemented reliably. They will be added as soon as access makes a correct implementation possible.
 
@@ -34,7 +34,7 @@ To install it:
 2. Open the downloaded file from your browser or file manager.
 3. If Android blocks it, allow **Install unknown apps** for the browser or file manager you used.
 4. Return to the APK and tap **Install**.
-5. For later updates, download the newest APK and install it over the existing app.
+5. For later updates, download the newest APK and install it over the existing app. Starting with v0.1.3, the app checks GitHub when opened or brought to the foreground and offers an update when available. You can also use **Settings → Check for updates**. Downloads and installation start only when you choose them.
 
 Android may display a warning because the application is distributed directly through GitHub rather than an app store. Before installing, confirm that the download came from this repository’s Releases page and compare its SHA-256 checksum with the checksum published in the release notes.
 
@@ -58,7 +58,11 @@ Advanced search maintains a persistent local post index and can search and filte
 
 ### Custom GIF library
 
-Save, favorite, organize, bulk-import, preview, and reuse your own GIFs and images from the mobile composer. The library is stored locally and can be included in app-data exports.
+Save, favorite, organize, bulk-import, preview, and reuse your own GIFs and images from the mobile composer. Saved originals are retained locally outside the temporary image cache, with their URLs kept as a fallback. Removing an item removes its saved file too. App-data exports include downloaded GIF originals as well as library entries.
+
+### Link previews
+
+Web links display cached preview cards in posts, comments, profile comments, and chats. Cards use available page metadata for a title, description, and image, with a clickable URL fallback. Duplicate destinations are combined; X posts and direct media retain their dedicated rendering. Requests and cache sizes are bounded to limit data use. Some sites block previews or require login, and oversized preview images fall back to text cards.
 
 ### Followers discovery
 

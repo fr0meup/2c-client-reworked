@@ -125,7 +125,7 @@ private val MediaBackground = Color(0xFF0A0907)
 internal fun FeedVideoSurface(
     videoUri: String,
     player: ExoPlayer,
-    thumbnailModel: Any,
+    thumbnailModel: Any?,
     isPlaying: Boolean,
     isBuffering: Boolean,
     thumbnailVisible: Boolean,
@@ -178,7 +178,7 @@ internal fun FeedVideoSurface(
         modifier = modifier
             .background(MediaBackground),
     ) {
-        if (thumbnailVisible) {
+        if (thumbnailVisible && thumbnailModel != null) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(thumbnailModel)
@@ -497,4 +497,3 @@ internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
-

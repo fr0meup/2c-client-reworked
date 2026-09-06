@@ -16,6 +16,8 @@ import com.twocents.mobile.ui.app.TwoCentsApp
 import com.twocents.mobile.ui.theme.TwoCentsTheme
 import com.twocents.mobile.notifications.NotificationNavigationBus
 import com.twocents.mobile.ui.common.AppLinkRouter
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val authStore by lazy { SecureAuthStore(applicationContext) }
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
                     authStore = authStore,
                     rpcApi = rpcApi,
                 )
+                com.twocents.mobile.updates.UpdatePrompt()
             }
         }
         requestMediaAccessIfNeeded()
@@ -62,6 +65,11 @@ class MainActivity : ComponentActivity() {
         }
         val missing = required.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) mediaPermissions.launch(missing.toTypedArray())
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch { com.twocents.mobile.updates.AppUpdates.check(applicationContext) }
     }
 
     override fun onNewIntent(intent: Intent) {

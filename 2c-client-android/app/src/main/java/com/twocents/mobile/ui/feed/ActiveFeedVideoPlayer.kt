@@ -154,7 +154,8 @@ internal fun ActiveFeedVideoPlayer(
     var playbackSpeed by remember(safeUri) { mutableFloatStateOf(1f) }
     var videoRatio by remember(safeUri) { mutableFloatStateOf(cachedMediaRatio(safeUri) ?: (16f / 9f)) }
     var inViewport by remember(safeUri) { mutableStateOf(true) }
-    var thumbnailModel by remember(safeUri) { mutableStateOf<Any>(safeUri) }
+    // Never give Coil a remote video: it can download the entire file to decode a frame.
+    var thumbnailModel by remember(safeUri) { mutableStateOf<Any?>(null) }
     LaunchedEffect(safeUri) {
         VideoPreviewRepository.prepare(context.applicationContext, safeUri)?.let { preview ->
             thumbnailModel = preview.file
@@ -243,7 +244,7 @@ internal fun ActiveFeedVideoPlayer(
     }
 
     LaunchedEffect(inViewport) {
-        if (!inViewport && (player.isPlaying || player.playWhenReady)) {
+        if (!inViewport) {
             handoff.positionMs = player.currentPosition.coerceAtLeast(0L)
             handoff.resumePlaying = false
             player.pause()

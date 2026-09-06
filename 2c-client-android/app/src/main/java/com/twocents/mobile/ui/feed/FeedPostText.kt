@@ -54,7 +54,7 @@ internal data class FeedPostContent(
 )
 
 internal fun prepareFeedPostContent(post: FeedPost): FeedPostContent {
-    val clean = cleanFeedText(post.text)
+    val clean = com.twocents.mobile.ui.common.withoutPreviewLinks(cleanFeedText(post.text))
     val textMedia = MediaPattern.findAll(clean).map { normalizeMediaUrl(it.value) }.distinct().toList()
     val metaGif = post.meta.giphyUrl?.let(::normalizeMediaUrl)
     val gifs = buildList {

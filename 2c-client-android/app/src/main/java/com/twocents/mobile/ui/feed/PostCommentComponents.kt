@@ -188,6 +188,7 @@ internal fun PostCommentRow(
         }
         tweetUrl?.let { TweetEmbedCard(it) }
         CommentImageAttachments(comment.mediaUrls)
+        if (!comment.deleted) com.twocents.mobile.ui.common.LinkPreviewCards(comment.text)
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,

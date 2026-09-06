@@ -317,14 +317,15 @@ private fun FeedMediaPrewarmer(posts: List<FeedPost>, listState: LazyListState) 
             .distinctUntilChanged()
             .collectLatest { range ->
                 if (!InteractionPreferences.automaticMediaAllowed(context)) return@collectLatest
-                val videos = range.mapNotNull { index -> posts[index].meta.videoUrl }.distinct().take(3)
-                videos.forEach { url -> VideoPreviewRepository.prepare(context.applicationContext, url) }
+                // Image prefetch stays responsive even if an MP4 metadata probe is slow.
+                // Visible video composables already request their cached preview.
                 val urls = range
                     .flatMap { index -> posts[index].warmableMediaUrls() }
                     .distinct()
                     .take(10)
                 for (url in urls) {
-                    imageLoader.enqueue(
+                    // Await so collectLatest cancels obsolete preloads when the viewport moves.
+                    imageLoader.execute(
                         ImageRequest.Builder(context)
                             .data(url)
                             .size(targetWidthPx, targetHeightPx)

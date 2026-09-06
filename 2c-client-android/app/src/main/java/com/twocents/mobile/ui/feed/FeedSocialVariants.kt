@@ -170,6 +170,7 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null) {
             )
         }
         val videoUrl = quote.meta.videoUrl
+        com.twocents.mobile.ui.common.LinkPreviewCards(quote.text, quote.meta.link)
         if (!videoUrl.isNullOrBlank()) {
             FeedVideoPlayer(videoUrl, compact = true)
         } else if (quote.meta.images.isNotEmpty()) {
@@ -206,5 +207,4 @@ internal fun FeedLinkCard(url: String) {
         Icon(Icons.Outlined.OpenInNew, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
     }
 }
-
 

@@ -139,7 +139,9 @@ internal fun FeedVideoPlayer(
     val handoff = remember(safeUri) { VideoPlaybackHandoff.state(safeUri) }
     var preview by remember(safeUri) { mutableStateOf<CachedVideoPreview?>(null) }
     var activated by remember(safeUri) {
-        mutableStateOf(handoffOnMount || handoff.positionMs > 0L || handoff.resumePlaying)
+        // Opening detail or revisiting a paused video must not start a fresh stream.
+        // Its saved position is restored when playback is explicitly requested.
+        mutableStateOf(handoff.resumePlaying)
     }
     var autoPlay by remember(safeUri) { mutableStateOf(false) }
     LaunchedEffect(safeUri, wifiOnlyMedia) {

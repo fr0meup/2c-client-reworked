@@ -94,6 +94,12 @@ internal fun exportLocalData(
             // deflate work keeps video-heavy backups quick and lets import stage all
             // attachments before it mutates the local data stores.
             zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
+            File(context.filesDir, "saved-gif-media").listFiles()
+                ?.filter { it.isFile && it.name.matches(Regex("[a-f0-9]{64}")) }?.forEach { gif ->
+                    zip.putNextEntry(ZipEntry("saved-gif-media/${gif.name}"))
+                    gif.inputStream().use { it.copyTo(zip, 64 * 1024) }
+                    zip.closeEntry()
+                }
             preparedDrafts.media.forEach { media ->
                 zip.putNextEntry(ZipEntry(media.archivePath))
                 context.contentResolver.openInputStream(media.source)?.use { it.copyTo(zip, 64 * 1024) }
@@ -152,6 +158,7 @@ internal fun importLocalData(context: Context, source: Uri): ImportedLocalData {
 private fun importArchive(context: Context, input: InputStream): ImportedLocalData {
     val draftRoot = File(context.filesDir, "compose-drafts")
     val staging = File(draftRoot, "import-media-${UUID.randomUUID()}")
+    val gifStaging = File(context.filesDir, "import-gifs-${UUID.randomUUID()}")
     var imported: ImportedLocalData? = null
     try {
         ZipInputStream(input).use { zip ->
@@ -162,6 +169,12 @@ private fun importArchive(context: Context, input: InputStream): ImportedLocalDa
                         imported = readManifest(JsonReader(InputStreamReader(zip, Charsets.UTF_8)))
                     }
                     entry.name == SEARCH_INDEX -> AdvancedSearchIndex.importBinary(DataInputStream(zip))
+                    entry.name.startsWith("saved-gif-media/") && !entry.isDirectory -> {
+                        val name = entry.name.removePrefix("saved-gif-media/")
+                        require(name.matches(Regex("[a-f0-9]{64}"))) { "Invalid saved GIF entry" }
+                        gifStaging.mkdirs()
+                        File(gifStaging, name).outputStream().buffered().use { zip.copyTo(it, 64 * 1024) }
+                    }
                     entry.name.startsWith("$DRAFT_MEDIA/") && !entry.isDirectory -> {
                         val name = entry.name.substringAfterLast('/').takeIf { it.isNotBlank() }
                             ?: error("Invalid draft attachment entry")
@@ -173,6 +186,14 @@ private fun importArchive(context: Context, input: InputStream): ImportedLocalDa
             }
         }
         val result = imported ?: error("This is not a valid 2c backup")
+        val gifRoot = File(context.filesDir, "saved-gif-media")
+        gifRoot.deleteRecursively()
+        if (gifStaging.exists()) {
+            if (!gifStaging.renameTo(gifRoot)) {
+                gifStaging.copyRecursively(gifRoot, overwrite = true)
+                gifStaging.deleteRecursively()
+            }
+        }
         val restored = File(draftRoot, "restored-media")
         restored.deleteRecursively()
         if (staging.exists()) {
@@ -185,6 +206,7 @@ private fun importArchive(context: Context, input: InputStream): ImportedLocalDa
         return result
     } catch (error: Throwable) {
         staging.deleteRecursively()
+        gifStaging.deleteRecursively()
         throw error
     }
 }

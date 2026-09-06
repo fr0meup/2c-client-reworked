@@ -174,7 +174,8 @@ internal fun ChatMessageRow(
                     Text("Message deleted", color = Color.White.copy(alpha = .2f), fontSize = 11.sp, fontStyle = FontStyle.Italic, modifier = Modifier.padding(8.dp))
                 } else {
                     val inlineMedia = message.mediaUrl ?: DirectChatMedia.find(message.text)?.value
-                    val visibleText = if (inlineMedia == null) message.text else message.text.replace(inlineMedia, "").trim()
+                    val visibleText = com.twocents.mobile.ui.common.withoutPreviewLinks(
+                        if (inlineMedia == null) message.text else message.text.replace(inlineMedia, "").trim())
                     val replyToUuid = message.replyToUuid
                     val rawReply = message.replyText ?: replyTarget?.text.orEmpty()
                     val replyMedia = replyTarget?.mediaUrl ?: DirectChatMedia.find(rawReply)?.value
@@ -226,6 +227,10 @@ internal fun ChatMessageRow(
                                     onClick = { AppHaptics.navigate(view); onOpenReply(replyToUuid) },
                                 )
                             }
+                            com.twocents.mobile.ui.common.LinkPreviewCards(
+                                text = message.text,
+                                modifier = Modifier.padding(bottom = if (visibleText.isBlank()) 0.dp else 5.dp),
+                            )
                             if (visibleText.isNotBlank()) LinkifiedText(
                                 text = visibleText,
                                 color = if (mine) Color(0xFF0F0E0A) else Color.White.copy(alpha = .92f),
@@ -235,6 +240,9 @@ internal fun ChatMessageRow(
                                 linkColor = if (mine) Color(0xFF0F0E0A) else Gold,
                                 modifier = if (inlineMedia != null) Modifier.padding(horizontal = 10.dp, vertical = 7.dp) else Modifier.padding(horizontal = 4.dp),
                             )
+                            com.twocents.mobile.ui.feed.commentTweetUrl(message.text)?.let {
+                                com.twocents.mobile.ui.feed.TweetEmbedCard(it)
+                            }
                             inlineMedia?.let { media ->
                                 AsyncImage(
                                     model = media,

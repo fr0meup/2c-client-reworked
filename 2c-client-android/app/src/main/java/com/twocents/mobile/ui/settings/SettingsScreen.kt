@@ -477,6 +477,16 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                         }
                     }
                     SettingsDivider()
+                    SettingRow(Icons.Outlined.Download, "Check for updates", "Find the latest Android release on GitHub") {
+                        scope.launch {
+                            val toast = AppToast.progress("Checking for updates…")
+                            val message = com.twocents.mobile.updates.AppUpdates.check(context.applicationContext, manual = true)
+                            if (message == null) AppToast.dismiss(toast)
+                            else if (message.startsWith("Couldn't")) AppToast.error(message, toast)
+                            else AppToast.success(message, toast)
+                        }
+                    }
+                    SettingsDivider()
                     ExpandableSettingRow(Icons.Outlined.Mail, "Contact", "Feedback and community links", contactExpanded) { contactExpanded = !contactExpanded }
                     AnimatedVisibility(contactExpanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                         Column(Modifier.padding(start = 18.dp, bottom = 6.dp)) {

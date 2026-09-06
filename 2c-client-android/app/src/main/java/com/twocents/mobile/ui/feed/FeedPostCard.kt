@@ -248,10 +248,10 @@ internal fun FeedPostCard(
             }
 
             when (post.postType) {
-                1 -> post.meta.link?.takeUnless { it == tweetUrl }?.let { FeedLinkCard(it) }
                 8 -> FeedTransactionCard(post)
                 9 -> FeedBudgetCard(post)
             }
+            com.twocents.mobile.ui.common.LinkPreviewCards(post.text, post.meta.link)
             post.meta.quotePost?.let { quote ->
                 FeedQuoteCard(quote, onClick = onOpenPost?.let { open -> { open(quote) } })
             }

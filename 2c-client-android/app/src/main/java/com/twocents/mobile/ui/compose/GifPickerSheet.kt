@@ -50,7 +50,10 @@ internal object GifLibrary {
         if (!json.isNullOrBlank()) return runCatching { JSONArray(json).let { array -> (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) } } }.getOrDefault(emptyList())
         return preferences.getStringSet(key, emptySet()).orEmpty().toList()
     }
-    private fun write(context: Context, key: String, values: List<String>) = prefs(context).edit().putString("${key}_ordered", JSONArray(values).toString()).apply()
+    private fun write(context: Context, key: String, values: List<String>) {
+        prefs(context).edit().putString("${key}_ordered", JSONArray(values).toString()).apply()
+        SavedGifFiles.sync(context)
+    }
     fun saved(context: Context) = read(context, "saved")
     fun favorites(context: Context) = read(context, "favorites")
     fun addMany(context: Context, raw: String): Pair<Int, Int> {
@@ -78,7 +81,7 @@ internal object GifLibrary {
         write(context, "saved", strings("saved").distinct().take(200))
         write(context, "favorites", strings("favorites").distinct().take(200))
     }
-    fun clear(context: Context) = prefs(context).edit().clear().apply()
+    fun clear(context: Context) { prefs(context).edit().clear().apply(); SavedGifFiles.sync(context) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,7 +103,11 @@ fun GifPickerSheet(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
         feedback = if (added == 0) "No new GIFs found" else "Added $added${if (skipped > 0) " · $skipped duplicate" else ""}"
     }
     LaunchedEffect(gifs) {
-        gifs.take(40).forEach { url -> context.imageLoader.enqueue(ImageRequest.Builder(context).data(url).size(360, 280).memoryCacheKey(url).diskCacheKey(url).build()) }
+        SavedGifFiles.sync(context)
+        // Warm the first visible rows; the lazy grid requests the rest as they enter view.
+        if (com.twocents.mobile.ui.settings.InteractionPreferences.automaticMediaAllowed(context)) {
+            gifs.take(6).forEach { url -> context.imageLoader.execute(ImageRequest.Builder(context).data(SavedGifFiles.model(context, url)).size(360, 280).memoryCacheKey(url).diskCacheKey(url).build()) }
+        }
     }
     LaunchedEffect(feedback) { if (feedback != null) { kotlinx.coroutines.delay(2200); feedback = null } }
 
@@ -175,7 +182,7 @@ private fun GifSectionLabel(label: String, gold: Boolean) {
 private fun GifPickerItem(url: String, favorite: Boolean, context: Context, onSelect: (String) -> Unit, reload: () -> Unit) {
     var ratio by remember(url) { mutableFloatStateOf(cachedMediaRatio(url) ?: 1.25f) }
     Box(Modifier.fillMaxWidth().aspectRatio(ratio.coerceIn(.48f, 2.5f)).clip(RoundedCornerShape(11.dp)).background(Color.Black).border(.7.dp, Color.White.copy(alpha = .06f), RoundedCornerShape(11.dp)).clickable { onSelect(url) }) {
-        AsyncImage(ImageRequest.Builder(context).data(url).memoryCacheKey(url).diskCacheKey(url).build(), "GIF", Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds, onSuccess = { result -> val image = result.result.image; if (image.width > 0 && image.height > 0) { ratio = image.width.toFloat() / image.height; cacheMediaRatio(url, ratio) } })
+        AsyncImage(ImageRequest.Builder(context).data(SavedGifFiles.model(context, url)).memoryCacheKey(url).diskCacheKey(url).build(), "GIF", Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds, onSuccess = { result -> val image = result.result.image; if (image.width > 0 && image.height > 0) { ratio = image.width.toFloat() / image.height; cacheMediaRatio(url, ratio) } })
         Row(Modifier.align(Alignment.TopEnd).padding(4.dp).clip(CircleShape).background(Color.Black.copy(alpha = .72f))) {
             Icon(if (favorite) Icons.Rounded.Star else Icons.Outlined.StarBorder, "Favorite", tint = if (favorite) GifGold else Color.White.copy(alpha = .75f), modifier = Modifier.size(28.dp).clickable { GifLibrary.toggleFavorite(context, url); reload() }.padding(6.dp))
             Icon(Icons.Outlined.DeleteOutline, "Remove", tint = Color.White.copy(alpha = .72f), modifier = Modifier.size(28.dp).clickable { GifLibrary.remove(context, url); reload() }.padding(6.dp))

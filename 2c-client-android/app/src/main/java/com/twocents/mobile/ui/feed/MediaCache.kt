@@ -37,13 +37,17 @@ internal data class CachedVideoPreview(val file: File, val ratio: Float?)
 internal object VideoPreviewRepository {
     private val memory = ConcurrentHashMap<String, CachedVideoPreview>()
     private val locks = ConcurrentHashMap<String, Mutex>()
+    // A failed probe must not spend its transfer budget again on every row remount.
+    private val retryAfter = ConcurrentHashMap<String, Long>()
 
     suspend fun prepare(context: Context, uri: String): CachedVideoPreview? = withContext(Dispatchers.IO) {
         memory[uri]?.let { return@withContext it }
+        if ((retryAfter[uri] ?: 0L) > System.currentTimeMillis()) return@withContext null
         val lock = locks.getOrPut(uri) { Mutex() }
         try {
             lock.withLock {
                 memory[uri]?.let { return@withLock it }
+                if ((retryAfter[uri] ?: 0L) > System.currentTimeMillis()) return@withLock null
                 val directory = File(context.cacheDir, "video-previews").apply { mkdirs() }
                 val key = MessageDigest.getInstance("SHA-256").digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }
                 val image = File(directory, "$key.jpg")
@@ -79,7 +83,9 @@ internal object VideoPreviewRepository {
                     } finally {
                         retriever.release()
                     }
-                }.getOrNull()?.also { preview ->
+                }.getOrNull().also { result ->
+                    if (result == null) retryAfter[uri] = System.currentTimeMillis() + 15 * 60 * 1000L
+                }?.also { preview ->
                     memory[uri] = preview
                     directory.listFiles()?.sortedByDescending(File::lastModified)?.drop(96)?.forEach { stale ->
                         if (stale.extension == "jpg") {
@@ -97,7 +103,8 @@ internal object VideoPreviewRepository {
 
 private class HttpRangeMediaDataSource(private val uri: String) : MediaDataSource() {
     companion object {
-        private const val ChunkBytes = 512 * 1024
+        // Metadata probes often request tiny ranges at opposite ends of an MP4.
+        private const val ChunkBytes = 64 * 1024
         private const val TransferBudgetBytes = 4 * 1024 * 1024
         private val client = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
@@ -160,7 +167,7 @@ private class HttpRangeMediaDataSource(private val uri: String) : MediaDataSourc
             val result = if (count == bytes.size) bytes else bytes.copyOf(count)
             transferred += result.size
             chunks[start] = result
-            while (chunks.size > 8) chunks.remove(chunks.entries.first().key)
+            while (chunks.size > TransferBudgetBytes / ChunkBytes) chunks.remove(chunks.entries.first().key)
             return result
         }
     }

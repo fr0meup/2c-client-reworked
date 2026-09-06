@@ -76,7 +76,7 @@ internal fun commentTweetUrl(text: String): String? =
     X_STATUS_MARKDOWN.find(text)?.groupValues?.getOrNull(1) ?: X_STATUS_RAW.find(text)?.value
 
 internal fun prepareCommentText(text: String): String = normalizeParagraphSpacing(
-    DirectMediaUrl.replace(text, "")
+    com.twocents.mobile.ui.common.withoutPreviewLinks(DirectMediaUrl.replace(text, ""))
         .replace(X_STATUS_MARKDOWN, "")
         .replace(X_STATUS_RAW, ""),
 )

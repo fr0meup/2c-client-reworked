@@ -112,6 +112,7 @@ internal fun ProfileCommentCard(comment: ProfileComment, currentVote: Int, alias
             if (visibleText.isNotBlank()) ExpandableCommentBody(visibleText, comment.uuid)
             tweetUrl?.let { TweetEmbedCard(it) }
             CommentImageAttachments(comment.mediaUrls)
+            com.twocents.mobile.ui.common.LinkPreviewCards(comment.text)
         }
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {

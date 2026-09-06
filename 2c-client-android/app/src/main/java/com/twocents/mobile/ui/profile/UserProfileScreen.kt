@@ -138,12 +138,12 @@ fun UserProfileContent(
             ProfileTab.Posts -> state.posts.flatMap(FeedPost::profileWarmableMediaUrls)
             ProfileTab.Comments -> state.comments.flatMap { it.mediaUrls }
             ProfileTab.Votes -> state.votedPosts.flatMap(FeedPost::profileWarmableMediaUrls)
-        }.distinct().take(24)
+        }.distinct().take(6)
         // Queue the active tab's first screen immediately. Coil still owns request
         // coalescing and both cache layers, so this removes reveal latency without
         // duplicating downloads or retaining decoded bitmaps in profile state.
         urls.forEach { url ->
-            context.imageLoader.enqueue(
+            context.imageLoader.execute(
                 ImageRequest.Builder(context).data(url).size(size, size)
                     .memoryCacheKey(url).diskCacheKey(url).build(),
             )
