@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.util.JsonReader
 import android.util.JsonWriter
 import java.time.Instant
 
@@ -141,16 +142,16 @@ internal object AdvancedSearchIndex {
         return output
     }
 
-    /** Streams a bounded snapshot directly from SQLite so export memory stays constant. */
+    /** Streams every indexed row directly from SQLite so export memory stays constant. */
     @Synchronized
-    fun writeExport(writer: JsonWriter, maxRows: Int = 20_000) {
+    fun writeExport(writer: JsonWriter) {
         writer.beginArray()
         database?.readableDatabase?.query(
             "posts",
             arrayOf("payload", "post_vote", "poll_vote", "likert_vote", "pick_vote"),
             null, null, null, null,
             "created_at DESC",
-            maxRows.coerceIn(1, 20_000).toString(),
+            null,
         )?.use { cursor ->
             while (cursor.moveToNext()) {
                 writer.beginObject()
@@ -168,6 +169,46 @@ internal object AdvancedSearchIndex {
             }
         }
         writer.endArray()
+    }
+
+    /**
+     * Imports a streamed backup in small transactions. This avoids materializing a
+     * potentially tens-of-thousands-row search corpus as one JSONArray in memory.
+     */
+    @Synchronized
+    fun importRows(reader: JsonReader) {
+        val payloads = ArrayList<String>(500)
+        val postVotes = HashMap<String, Int>()
+        val pollVotes = HashMap<String, Int>()
+        val likertVotes = HashMap<String, Int>()
+        val pickVotes = HashMap<String, String>()
+
+        fun flush() {
+            if (payloads.isEmpty()) return
+            merge(payloads, postVotes, pollVotes, likertVotes, pickVotes)
+            payloads.clear(); postVotes.clear(); pollVotes.clear(); likertVotes.clear(); pickVotes.clear()
+        }
+
+        reader.beginArray()
+        while (reader.hasNext()) {
+            val row = reader.readJsonObject()
+            val payload = when (val stored = row.opt("payload")) {
+                is org.json.JSONObject -> stored
+                is String -> runCatching { org.json.JSONObject(stored) }.getOrNull()
+                else -> null
+            } ?: row
+            val raw = payload.toString()
+            val uuid = payload.optString("uuid")
+            if (uuid.isBlank()) continue
+            payloads += raw
+            if (row.has("post_vote") && !row.isNull("post_vote")) postVotes[uuid] = row.optInt("post_vote")
+            if (row.has("poll_vote") && !row.isNull("poll_vote") && row.optInt("poll_vote", -1) >= 0) pollVotes[uuid] = row.optInt("poll_vote")
+            if (row.has("likert_vote") && !row.isNull("likert_vote") && row.optInt("likert_vote", -1) >= 0) likertVotes[uuid] = row.optInt("likert_vote")
+            row.optString("pick_vote").takeIf(String::isNotBlank)?.let { pickVotes[uuid] = it }
+            if (payloads.size >= 500) flush()
+        }
+        reader.endArray()
+        flush()
     }
 
     @Synchronized
@@ -210,6 +251,28 @@ internal object AdvancedSearchIndex {
             }
         }
     }
+}
+
+private fun JsonReader.readJsonObject(): org.json.JSONObject {
+    val output = org.json.JSONObject()
+    beginObject()
+    while (hasNext()) output.put(nextName(), readJsonValue())
+    endObject()
+    return output
+}
+
+private fun JsonReader.readJsonValue(): Any? = when (peek()) {
+    android.util.JsonToken.BEGIN_OBJECT -> readJsonObject()
+    android.util.JsonToken.BEGIN_ARRAY -> org.json.JSONArray().also { array ->
+        beginArray(); while (hasNext()) array.put(readJsonValue()); endArray()
+    }
+    android.util.JsonToken.STRING -> nextString()
+    android.util.JsonToken.NUMBER -> nextString().let { number ->
+        number.toLongOrNull() ?: number.toDoubleOrNull() ?: number
+    }
+    android.util.JsonToken.BOOLEAN -> nextBoolean()
+    android.util.JsonToken.NULL -> { nextNull(); org.json.JSONObject.NULL }
+    else -> { skipValue(); org.json.JSONObject.NULL }
 }
 
 internal data class AdvancedSearchStatuses(

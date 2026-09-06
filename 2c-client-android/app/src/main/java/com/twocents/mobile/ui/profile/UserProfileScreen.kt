@@ -57,6 +57,7 @@ import com.twocents.mobile.RpcApi
 import com.twocents.mobile.ui.compose.ComposeAuthorProfile
 import com.twocents.mobile.ui.feed.*
 import com.twocents.mobile.ui.shell.ProfileSkeleton
+import com.twocents.mobile.ui.settings.InteractionPreferences
 import com.twocents.mobile.ui.theme.Background
 import com.twocents.mobile.notifications.NotificationIcons
 import kotlinx.coroutines.launch
@@ -130,21 +131,31 @@ fun UserProfileContent(
             .distinctUntilChanged()
             .collect { shouldLoad -> if (shouldLoad) controller.loadMore(tab) }
     }
-    LaunchedEffect(state.comments, tab) {
-        if (tab != ProfileTab.Comments) return@LaunchedEffect
+    LaunchedEffect(tab, state.posts, state.comments, state.votedPosts) {
+        if (!InteractionPreferences.automaticMediaAllowed(context)) return@LaunchedEffect
         val size = with(density) { 380.dp.roundToPx() }
-        state.comments.flatMap { it.mediaUrls }.distinct().take(24).forEach { url ->
+        val urls = when (tab) {
+            ProfileTab.Posts -> state.posts.flatMap(FeedPost::profileWarmableMediaUrls)
+            ProfileTab.Comments -> state.comments.flatMap { it.mediaUrls }
+            ProfileTab.Votes -> state.votedPosts.flatMap(FeedPost::profileWarmableMediaUrls)
+        }.distinct().take(24)
+        // Queue the active tab's first screen immediately. Coil still owns request
+        // coalescing and both cache layers, so this removes reveal latency without
+        // duplicating downloads or retaining decoded bitmaps in profile state.
+        urls.forEach { url ->
             context.imageLoader.enqueue(
                 ImageRequest.Builder(context).data(url).size(size, size)
                     .memoryCacheKey(url).diskCacheKey(url).build(),
             )
-            delay(30)
+            delay(12)
         }
     }
-    LaunchedEffect(state.posts, state.votedPosts, state.pickPosts) {
-        (state.posts + state.votedPosts + state.pickPosts).mapNotNull { it.meta.videoUrl }.distinct().take(8).forEach { url ->
+    LaunchedEffect(tab, state.posts, state.votedPosts) {
+        if (!InteractionPreferences.automaticMediaAllowed(context)) return@LaunchedEffect
+        val posts = if (tab == ProfileTab.Votes) state.votedPosts else if (tab == ProfileTab.Posts) state.posts else emptyList()
+        posts.mapNotNull { it.meta.videoUrl }.distinct().take(4).forEach { url ->
             VideoPreviewRepository.prepare(context.applicationContext, url)
-            delay(35)
+            delay(15)
         }
     }
     LaunchedEffect(state.user) {
@@ -276,4 +287,13 @@ fun UserProfileContent(
             },
         )
     }
+}
+
+private fun FeedPost.profileWarmableMediaUrls(): List<String> = buildList {
+    addAll(meta.images.take(2))
+    meta.giphyUrl?.let(::add)
+    meta.categoryIconUrl?.let(::add)
+    meta.receiptImageUrl?.let(::add)
+    meta.quotePost?.meta?.images?.firstOrNull()?.let(::add)
+    meta.quotePost?.meta?.giphyUrl?.let(::add)
 }

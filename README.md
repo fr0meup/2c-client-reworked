@@ -12,6 +12,8 @@ The goal is a more polished Android experience: lightweight, fast, data-consciou
 
 ## Current status
 
+Latest Android release: **v0.1.1**.
+
 The Android client supports the functionality of the official twocents application with the current exceptions of creating transactions and budgets. Those features are not currently available to the developer in the EU, which means their behavior and API contracts cannot yet be tested or implemented reliably. They will be added as soon as access makes a correct implementation possible.
 
 Existing transaction and budget content may still be displayed where the available response data permits it.
@@ -46,7 +48,7 @@ Do not uninstall the app when updating unless the release notes explicitly requi
 - Notifications with direct navigation to the relevant post, comment, profile, room, or message.
 - Rooms, direct messages, replies, reactions, typing indicators, media, unread markers, custom rooms, and room discovery.
 - Native Android push notifications, launcher badges, deep links, media viewing, downloads, and app settings.
-- Local import and export for supported app data, preferences, search indexes, drafts, GIF collections, and statistics.
+- Portable local import and export for supported app data, preferences, complete search indexes, drafts with their media attachments, GIF collections, and statistics.
 
 ## Additional client features
 
@@ -64,7 +66,7 @@ twocents does not expose a complete follower-list endpoint. The client can build
 
 ### Drafts
 
-Save unfinished posts locally and return to them later, including supported post options and attachment references. Draft data can be included in exports so it is not tied permanently to one installation.
+Save unfinished posts locally and return to them later, including supported post options and media attachments. Portable `.2cbackup` exports store draft media as raw files alongside the backup manifest, allowing it to survive uninstalling and reinstalling the app.
 
 ### Custom group chats
 
@@ -103,7 +105,7 @@ More features and refinements are planned. If you find a bug or have a feature r
 
 - Do not share your twocents backup code, bearer token, secret key, release keystore, or signing passwords.
 - Account credentials are handled by the app to communicate with twocents services. Push delivery uses Firebase Cloud Messaging.
-- Local exports may contain private application data. Store them securely.
+- Local `.2cbackup` exports may contain private application data and raw draft media. Store them securely.
 - The release signing key is not an account credential. It proves that future APK updates came from the same publisher.
 - This repository must never contain a private signing key or real signing credentials.
 
@@ -195,7 +197,7 @@ chmod +x ./gradlew
 
 ### 4. Create a private release-signing key
 
-Every installable Android APK must be signed. Use one dedicated production key for every public 2c client android release. Never use the default Android debug key for published GitHub releases. See Android's official [app-signing documentation](https://developer.android.com/studio/publish/app-signing) for the underlying update and key-security requirements.
+Every installable Android APK must be signed. Create one dedicated key and keep using that same key for future self-built updates; Android will reject an update signed by a different key. See Android's official [app-signing documentation](https://developer.android.com/studio/publish/app-signing) for the underlying requirements.
 
 Windows PowerShell:
 
@@ -247,7 +249,7 @@ keyPassword=your-key-password
 
 On macOS or Linux, use a path such as `/Users/your-name/.android/2c-release.jks` or `/home/your-name/.android/2c-release.jks`.
 
-Both `signing.properties` and private-key file formats are ignored by Git. Verify that they remain untracked before publishing any source changes.
+Both `signing.properties` and private-key file formats are ignored by Git so local credentials stay outside source control.
 
 Alternatively, CI can provide these four environment variables instead of a properties file:
 
@@ -259,8 +261,6 @@ TWOCENTS_RELEASE_KEY_PASSWORD
 ```
 
 ### 6. Build the signed release APK
-
-Before each public release, increment `versionCode` and update `versionName` in `app/build.gradle.kts`.
 
 Windows PowerShell:
 
@@ -316,54 +316,21 @@ macOS or Linux:
 
 `-r` updates an existing installation while retaining its local data. It only works when the installed APK and replacement APK use the same application ID and signing key. Anyone using an older debug-signed build must uninstall it once before installing the first production-signed release.
 
-### 9. Build, copy, and install in one command
+### 9. Build and install in one command
 
-These commands build and sign the release through Gradle, copy the distributable APK to the outer repository folder as `2c-client-android.apk`, and stream-install that exact APK. Copying and installation only run when the preceding operation succeeds.
+These commands build and sign the release through Gradle, then stream-install it. Installation only runs when the build succeeds.
 
 Windows PowerShell:
 
 ```powershell
-$env:ANDROID_HOME = "C:\Android\Sdk"; .\gradlew.bat :app:assembleRelease --console=plain; if ($LASTEXITCODE -eq 0) { Copy-Item -LiteralPath ".\app\build\outputs\apk\release\app-release.apk" -Destination "..\2c-client-android.apk" -Force; if ($?) { & "$env:ANDROID_HOME\platform-tools\adb.exe" install --streaming -r "..\2c-client-android.apk" } }
+$env:ANDROID_HOME = "C:\Android\Sdk"; .\gradlew.bat :app:assembleRelease --console=plain; if ($LASTEXITCODE -eq 0) { & "$env:ANDROID_HOME\platform-tools\adb.exe" install --streaming -r ".\app\build\outputs\apk\release\app-release.apk" }
 ```
 
 macOS or Linux:
 
 ```bash
-./gradlew :app:assembleRelease --console=plain && cp "app/build/outputs/apk/release/app-release.apk" "../2c-client-android.apk" && "$ANDROID_HOME/platform-tools/adb" install --streaming -r "../2c-client-android.apk"
+./gradlew :app:assembleRelease --console=plain && "$ANDROID_HOME/platform-tools/adb" install --streaming -r "app/build/outputs/apk/release/app-release.apk"
 ```
-
-### 10. Publish through GitHub Releases
-
-Create a version tag and push it:
-
-```bash
-git tag -a v0.1.0 -m "2c client android v0.1.0"
-git push origin v0.1.0
-```
-
-Create a [GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) from that tag and attach the outer `2c-client-android.apk` as a release asset. Keep that exact asset name so the permanent latest-download link near the top of this README continues to work. Do not commit the APK into the source tree.
-
-Generate and publish a SHA-256 checksum alongside the APK.
-
-Windows PowerShell:
-
-```powershell
-Get-FileHash "..\2c-client-android.apk" -Algorithm SHA256
-```
-
-macOS:
-
-```bash
-shasum -a 256 "../2c-client-android.apk"
-```
-
-Linux:
-
-```bash
-sha256sum "../2c-client-android.apk"
-```
-
-Users downloading from GitHub must allow installation from their browser or file manager when Android asks. Future releases signed with the same key can be installed over the existing app without clearing its local data.
 
 ## Contributing and reporting problems
 

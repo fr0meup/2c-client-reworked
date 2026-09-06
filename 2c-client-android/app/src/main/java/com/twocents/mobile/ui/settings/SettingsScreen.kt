@@ -109,7 +109,7 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
     var confirmLogout by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf<String?>(null) }
     val view = androidx.compose.ui.platform.LocalView.current
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val offlineForExport = offline
         val verifiedForExport = verifiedOnly
@@ -123,36 +123,15 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
             // interactive and the pinned toast is replaced only by a terminal result.
             val toastId = AppToast.progress("Exporting local data…")
             runCatching {
-                val descriptor = context.contentResolver.openFileDescriptor(uri, "rwt") ?: error("Couldn't open the selected file")
-                descriptor.use { parcel ->
-                    FileOutputStream(parcel.fileDescriptor).use { stream ->
-                        JsonWriter(BufferedWriter(OutputStreamWriter(stream, Charsets.UTF_8), 64 * 1024)).use { writer ->
-                            writer.beginObject()
-                            writer.name("version").value(2L)
-                            writer.name("offline").value(offlineForExport)
-                            writer.name("verified_only").value(verifiedForExport)
-                            writer.name("auto_like_own_content").value(autoLikeForExport)
-                            writer.name("auto_play_videos").value(autoPlayForExport)
-                            writer.name("wifi_only_media").value(wifiOnlyForExport)
-                            writer.name("haptic_feedback").value(hapticsForExport)
-                            writer.name("notification_preferences").value(NotificationPreferences.exportJson(context).toString())
-                            writer.name("muted").beginArray(); mutedForExport.forEach(writer::value); writer.endArray()
-                            writer.name("search_posts"); AdvancedSearchIndex.writeExport(writer)
-                            writer.name("activity_stats").value(NotificationHistoryStore(context, auth.userUuid).exportJson().toString())
-                            writer.name("followers_scan").value(FollowersScanStore(context, auth.userUuid).exportJson().toString())
-                            writer.name("gif_library").beginObject()
-                            writer.name("saved").beginArray(); GifLibrary.saved(context).take(200).forEach(writer::value); writer.endArray()
-                            writer.name("favorites").beginArray(); GifLibrary.favorites(context).take(200).forEach(writer::value); writer.endArray()
-                            writer.endObject()
-                            writer.name("drafts")
-                            val draftFile = java.io.File(context.filesDir, "compose-drafts/drafts.json")
-                            if (draftFile.isFile && draftFile.length() <= 2L * 1024L * 1024L) writer.value(draftFile.readText()) else writer.nullValue()
-                            writer.endObject()
-                            writer.flush()
-                        }
-                        stream.fd.sync()
-                    }
-                }
+                exportLocalData(
+                    context = context,
+                    destination = uri,
+                    userUuid = auth.userUuid,
+                    state = LocalDataExportState(
+                        offlineForExport, verifiedForExport, autoLikeForExport, autoPlayForExport,
+                        wifiOnlyForExport, hapticsForExport, mutedForExport,
+                    ),
+                )
             }
                 .onSuccess { AppToast.success("Backup exported", toastId) }
                 .onFailure { AppToast.error(friendlyError(it, "Export failed"), toastId) }
@@ -163,44 +142,45 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
         scope.launch {
             val toastId = AppToast.progress("Importing local data…")
             runCatching {
-                val root = withContext(Dispatchers.IO) {
-                    val stream = context.contentResolver.openInputStream(uri) ?: error("Couldn't open the selected backup")
-                    val payload = stream.bufferedReader().use { it.readText() }.trim()
-                    if (payload.isEmpty()) error("The selected backup is empty")
-                    runCatching { JSONObject(payload) }.getOrElse { error("That file isn't a valid 2c backup") }
-                }
-                val importedMuted = root.optJSONArray("muted") ?: JSONArray()
+                val imported = withContext(Dispatchers.IO) { importLocalData(context, uri) }
                 muteStore.all().forEach { muteStore.setMuted(it, false) }
-                for (index in 0 until importedMuted.length()) importedMuted.optString(index).takeIf(String::isNotBlank)?.let { muteStore.setMuted(it, true) }
-                val importedOffline = root.optBoolean("offline", false)
+                imported.muted.forEach { muteStore.setMuted(it, true) }
+                val importedOffline = imported.offline
                 OfflineModeStore.setEnabled(context, auth.userUuid, importedOffline); offline = importedOffline; onOfflineChanged(importedOffline)
-                val importedVerified = root.optBoolean("verified_only", false)
+                val importedVerified = imported.verifiedOnly
                 VerifiedContentFilterStore.setEnabled(context, auth.userUuid, importedVerified); verifiedOnly = importedVerified
-                val importedAutoLike = root.optBoolean("auto_like_own_content", true)
+                val importedAutoLike = imported.autoLikeOwnContent
                 InteractionPreferences.setAutoLikeOwnContent(context, importedAutoLike); autoLikeOwnContent = importedAutoLike
-                val importedAutoPlay = root.optBoolean("auto_play_videos", false)
+                val importedAutoPlay = imported.autoPlayVideos
                 InteractionPreferences.setAutoPlayVideos(context, importedAutoPlay); autoPlayVideos = importedAutoPlay
-                val importedWifiOnly = root.optBoolean("wifi_only_media", false)
+                val importedWifiOnly = imported.wifiOnlyMedia
                 InteractionPreferences.setWifiOnlyMedia(context, importedWifiOnly); wifiOnlyMedia = importedWifiOnly
-                val importedHaptics = root.optBoolean("haptic_feedback", true)
+                val importedHaptics = imported.haptics
                 AppHaptics.setEnabled(context, importedHaptics); haptics = importedHaptics
-                root.optString("notification_preferences").takeIf(String::isNotBlank)?.let {
+                imported.notificationPreferences?.takeIf(String::isNotBlank)?.let {
                     NotificationPreferences.importJson(context, JSONObject(it))
                     pushCategories = NotificationPreferences.enabledSet(context, push = true)
                     inAppCategories = NotificationPreferences.enabledSet(context, push = false)
                 }
-                root.optJSONArray("search_posts")?.let(AdvancedSearchIndex::importRows)
                 searchIndexCount = AdvancedSearchMemoryIndex.count()
-                root.optString("activity_stats").takeIf { it.isNotBlank() }?.let {
+                imported.activityStats?.takeIf { it.isNotBlank() }?.let {
                     NotificationHistoryStore(context, auth.userUuid).importJson(JSONObject(it))
                 }
-                root.optString("followers_scan").takeIf { it.isNotBlank() && it != "{}" }?.let {
+                imported.followersScan?.takeIf { it.isNotBlank() && it != "{}" }?.let {
                     FollowersScanStore(context, auth.userUuid).importJson(JSONObject(it))
                     FollowersScanner.reloadStored(context, auth.userUuid)
                 }
-                root.optJSONObject("gif_library")?.let { GifLibrary.importJson(context, it) }
-                root.optString("drafts").takeIf { it.isNotBlank() && it != "null" }?.let { drafts ->
-                    withContext(Dispatchers.IO) { java.io.File(context.filesDir, "compose-drafts/drafts.json").apply { parentFile?.mkdirs(); writeText(drafts) } }
+                imported.gifLibrary?.let { GifLibrary.importJson(context, it) }
+                withContext(Dispatchers.IO) {
+                    val draftRoot = java.io.File(context.filesDir, "compose-drafts")
+                    java.io.File(draftRoot, "media").deleteRecursively()
+                    val drafts = imported.drafts?.takeIf { it.isNotBlank() && it != "null" }
+                    if (drafts == null) {
+                        java.io.File(draftRoot, "drafts.json").delete()
+                        java.io.File(draftRoot, "restored-media").deleteRecursively()
+                    } else {
+                        java.io.File(draftRoot, "drafts.json").apply { parentFile?.mkdirs(); writeText(drafts) }
+                    }
                 }
             }.onSuccess { AppToast.success("Backup imported", toastId) }
                 .onFailure { AppToast.error(friendlyError(it, "Import failed"), toastId) }
@@ -384,8 +364,20 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                                         .onFailure { AppToast.error(friendlyError(it, "Couldn't clear search index"), toastId) }
                                 }
                             }
-                            SettingRow(Icons.Outlined.Download, "Export data", "Back up local app data, drafts and search index") { exportLauncher.launch("twocents-backup.json") }
-                            SettingRow(Icons.Outlined.Upload, "Import data", "Restore a twocents backup") { importLauncher.launch(arrayOf("application/json", "text/json", "text/plain")) }
+                            SettingRow(Icons.Outlined.Download, "Export data", "Back up local app data, drafts and search index") { exportLauncher.launch("twocents-backup.2cbackup") }
+                            SettingRow(
+                                Icons.Outlined.Upload,
+                                if (confirmClear == "import") "Are you sure?" else "Import data",
+                                if (confirmClear == "import") "This replaces your current local data and cannot be undone" else "Restore a twocents backup",
+                            ) {
+                                if (confirmClear != "import") {
+                                    AppHaptics.open(view)
+                                    confirmClear = "import"
+                                } else {
+                                    confirmClear = null
+                                    importLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/json", "text/json", "text/plain"))
+                                }
+                            }
                             SettingRow(Icons.Outlined.DeleteForever, if (confirmClear == "local") "Are you sure?" else "Clear local data", if (confirmClear == "local") "Tap again to permanently clear local app data" else "Export a backup first—saved GIFs, drafts and other local-only data can be lost") {
                                 if (confirmClear != "local") { AppHaptics.open(view); confirmClear = "local" } else scope.launch {
                                     confirmClear = null
@@ -398,7 +390,7 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                                         InteractionPreferences.setAutoLikeOwnContent(context, true)
                                         InteractionPreferences.setAutoPlayVideos(context, false)
                                         InteractionPreferences.setWifiOnlyMedia(context, false)
-                                        withContext(Dispatchers.IO) { java.io.File(context.filesDir, "compose-drafts/drafts.json").delete() }
+                                        withContext(Dispatchers.IO) { java.io.File(context.filesDir, "compose-drafts").deleteRecursively() }
                                         context.imageLoader.memoryCache?.clear(); withContext(Dispatchers.IO) { context.imageLoader.diskCache?.clear() }
                                     }.onSuccess { searchIndexCount = AdvancedSearchMemoryIndex.count(); autoLikeOwnContent = true; autoPlayVideos = false; wifiOnlyMedia = false; AppToast.success("Local data cleared", toastId) }
                                         .onFailure { AppToast.error(friendlyError(it, "Couldn't clear local data"), toastId) }

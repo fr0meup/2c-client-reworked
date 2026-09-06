@@ -1,6 +1,10 @@
 package com.twocents.mobile.ui.compose
 
 import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import com.twocents.mobile.ui.feed.FeedPost
 import com.twocents.mobile.ui.feed.parseFeedPost
 import java.io.File
@@ -18,6 +22,7 @@ internal data class StoredComposeDraft(
 
 /** Draft metadata lives in filesDir, so clearing image/network caches never removes it. */
 internal class ComposeDraftStore(context: Context) {
+    private val appContext = context.applicationContext
     private val directory = File(context.filesDir, "compose-drafts")
     private val file = File(directory, "drafts.json")
 
@@ -25,7 +30,8 @@ internal class ComposeDraftStore(context: Context) {
 
     suspend fun save(draft: ComposePostDraft, existingId: String? = null): List<StoredComposeDraft> = withContext(Dispatchers.IO) {
         val id = existingId ?: UUID.randomUUID().toString()
-        val updated = (readNow().filterNot { it.id == id } + StoredComposeDraft(id, System.currentTimeMillis(), draft))
+        val durableDraft = draft.copy(mediaUris = persistMedia(id, draft.mediaUris))
+        val updated = (readNow().filterNot { it.id == id } + StoredComposeDraft(id, System.currentTimeMillis(), durableDraft))
             .sortedByDescending(StoredComposeDraft::savedAt)
         writeNow(updated)
         updated
@@ -34,7 +40,57 @@ internal class ComposeDraftStore(context: Context) {
     suspend fun delete(id: String): List<StoredComposeDraft> = withContext(Dispatchers.IO) {
         val updated = readNow().filterNot { it.id == id }
         writeNow(updated)
+        File(directory, "media/$id").deleteRecursively()
         updated
+    }
+
+    /**
+     * Picker grants are not portable and can expire. A draft therefore owns private
+     * copies of local attachments; remote GIF URLs stay remote and need no copy.
+     */
+    private fun persistMedia(draftId: String, mediaUris: List<String>): List<String> {
+        val local = mediaUris.filterNot { it.startsWith("http://") || it.startsWith("https://") }
+        val target = File(directory, "media/$draftId")
+        if (local.isEmpty()) {
+            target.deleteRecursively()
+            return mediaUris
+        }
+        val staging = File(directory, "media/.staging-${UUID.randomUUID()}")
+        return try {
+            staging.mkdirs()
+            var localIndex = 0
+            val durable = mediaUris.map { raw ->
+                if (raw.startsWith("http://") || raw.startsWith("https://")) return@map raw
+                val source = Uri.parse(raw)
+                val extension = mediaExtension(source)
+                val name = "${localIndex++}${extension.takeIf(String::isNotBlank)?.let { ".$it" }.orEmpty()}"
+                val stagedFile = File(staging, name)
+                appContext.contentResolver.openInputStream(source)?.use { input ->
+                    stagedFile.outputStream().buffered(64 * 1024).use { output -> input.copyTo(output, 64 * 1024) }
+                } ?: error("A draft attachment could not be read")
+                FileProvider.getUriForFile(appContext, "${appContext.packageName}.files", File(target, name)).toString()
+            }
+            target.deleteRecursively()
+            target.parentFile?.mkdirs()
+            if (!staging.renameTo(target)) {
+                staging.copyRecursively(target, overwrite = true)
+                staging.deleteRecursively()
+            }
+            durable
+        } catch (error: Throwable) {
+            staging.deleteRecursively()
+            throw error
+        }
+    }
+
+    private fun mediaExtension(uri: Uri): String {
+        val displayName = runCatching {
+            appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+        }.getOrNull()
+        displayName?.substringAfterLast('.', "")?.takeIf { it.length in 1..8 }?.let { return it.lowercase() }
+        return appContext.contentResolver.getType(uri)?.let(MimeTypeMap.getSingleton()::getExtensionFromMimeType).orEmpty()
     }
 
     private fun readNow(): List<StoredComposeDraft> {

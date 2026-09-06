@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.twocents.mobile.ui.theme.NoFontPadding
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -157,7 +158,15 @@ internal fun AppToastHost(modifier: Modifier = Modifier) {
                 ) {
                     if (progress) CircularProgressIndicator(Modifier.size(15.dp), color = accent, strokeWidth = 1.6.dp)
                     else Icon(if (error) Icons.Outlined.ErrorOutline else Icons.Outlined.CheckCircle, null, tint = accent, modifier = Modifier.size(15.dp))
-                    Text(shown.message.message, color = accent, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(max = 238.dp))
+                    Text(
+                        shown.message.message,
+                        color = accent,
+                        fontSize = 11.5.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        style = NoFontPadding,
+                        modifier = Modifier.widthIn(max = 238.dp),
+                    )
                     if (!progress) Box(
                         Modifier.size(20.dp).clip(CircleShape).clickable {
                             val index = toasts.indexOfFirst { it.message.id == shown.message.id }
