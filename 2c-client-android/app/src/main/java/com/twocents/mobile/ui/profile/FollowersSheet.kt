@@ -150,7 +150,7 @@ internal fun FollowersSheet(
                             Text("  (BETA)", color = Color.White.copy(alpha = .25f), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            if (state.running) state.phase else if (state.snapshot.completedAt > 0) "${state.snapshot.followers.size} found in the last scan" else "Scan available users",
+                            if (state.running) state.phase else if (state.snapshot.completedAt > 0 || state.snapshot.followers.isNotEmpty()) "${state.snapshot.followers.size} known followers" else "Scan available users",
                             color = Color.White.copy(alpha = .45f), fontSize = 11.5.sp,
                         )
                     }

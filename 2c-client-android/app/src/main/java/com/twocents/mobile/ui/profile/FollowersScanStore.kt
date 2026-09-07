@@ -10,6 +10,7 @@ internal data class FollowersScanSnapshot(
     val candidates: List<String> = emptyList(),
     val followers: List<FollowerEntry> = emptyList(),
     val completedAt: Long = 0L,
+    val followEvents: Map<String, Long> = emptyMap(),
 )
 
 internal data class FollowerEntry(val alias: String?, val profile: ComposeAuthorProfile)
@@ -18,20 +19,20 @@ internal data class FollowerEntry(val alias: String?, val profile: ComposeAuthor
 internal class FollowersScanStore(context: Context, private val userUuid: String) {
     private val file = File(context.applicationContext.filesDir, "followers-scan/$userUuid.json")
 
-    @Synchronized
-    fun read(): FollowersScanSnapshot = runCatching {
+    fun read(): FollowersScanSnapshot = synchronized(Lock) { runCatching {
         val root = JSONObject(file.readText())
         FollowersScanSnapshot(
             candidates = root.optJSONArray("candidates").strings(),
             followers = root.optJSONArray("followers").objects().mapNotNull(::parseEntry),
             completedAt = root.optLong("completedAt"),
+            followEvents = root.optJSONObject("followEvents").eventTimes(),
         )
-    }.getOrDefault(FollowersScanSnapshot())
+    }.getOrDefault(FollowersScanSnapshot()) }
 
-    @Synchronized
-    fun write(snapshot: FollowersScanSnapshot) {
+    fun write(snapshot: FollowersScanSnapshot): Unit = synchronized(Lock) {
         file.parentFile?.mkdirs()
         val root = JSONObject().put("completedAt", snapshot.completedAt)
+            .put("followEvents", JSONObject(snapshot.followEvents))
             .put("candidates", JSONArray(snapshot.candidates))
             .put("followers", JSONArray().apply { snapshot.followers.forEach { put(it.json()) } })
         val temporary = File(file.parentFile, "${file.name}.tmp")
@@ -39,11 +40,21 @@ internal class FollowersScanStore(context: Context, private val userUuid: String
         if (!temporary.renameTo(file)) { file.writeText(temporary.readText()); temporary.delete() }
     }
 
-    fun exportJson(): JSONObject = if (file.isFile) runCatching { JSONObject(file.readText()) }.getOrDefault(JSONObject()) else JSONObject()
+    /** All store instances share a lock: push, refresh, aliases and scans may overlap. */
+    fun modify(transform: (FollowersScanSnapshot) -> FollowersScanSnapshot): FollowersScanSnapshot = synchronized(Lock) {
+        val previous = read()
+        val next = transform(previous)
+        if (next != previous) write(next)
+        next
+    }
+
+    fun exportJson(): JSONObject = synchronized(Lock) { if (file.isFile) runCatching { JSONObject(file.readText()) }.getOrDefault(JSONObject()) else JSONObject() }
     fun importJson(root: JSONObject) = write(
-        FollowersScanSnapshot(root.optJSONArray("candidates").strings(), root.optJSONArray("followers").objects().mapNotNull(::parseEntry), root.optLong("completedAt")),
+        FollowersScanSnapshot(root.optJSONArray("candidates").strings(), root.optJSONArray("followers").objects().mapNotNull(::parseEntry), root.optLong("completedAt"), root.optJSONObject("followEvents").eventTimes()),
     )
-    fun clear() { file.delete() }
+    fun clear() { synchronized(Lock) { file.delete() } }
+
+    private companion object { val Lock = Any() }
 
     private fun parseEntry(raw: JSONObject): FollowerEntry? {
         val uuid = raw.optString("uuid").takeIf(String::isNotBlank) ?: return null
@@ -63,6 +74,11 @@ internal class FollowersScanStore(context: Context, private val userUuid: String
         .put("balance", profile.balance).put("subscriptionType", profile.subscriptionType)
         .put("role", profile.role ?: JSONObject.NULL).put("gender", profile.gender ?: JSONObject.NULL)
         .put("age", profile.age ?: JSONObject.NULL).put("arena", profile.arena ?: JSONObject.NULL)
+}
+
+private fun JSONObject?.eventTimes(): Map<String, Long> = buildMap {
+    val source = this@eventTimes ?: return@buildMap
+    source.keys().forEach { uuid -> put(uuid, source.optLong(uuid)) }
 }
 
 private fun JSONArray?.strings(): List<String> = buildList {

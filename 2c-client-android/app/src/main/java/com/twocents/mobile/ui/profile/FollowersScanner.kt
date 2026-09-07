@@ -56,6 +56,18 @@ internal object FollowersScanner {
         states.getOrPut(userUuid) { mutableStateOf(FollowersScanState()) }.value = FollowersScanState(snapshot = FollowersScanStore(context, userUuid).read())
     }
 
+    /** Shared by push and notification refresh; disk work never blocks notification UI. */
+    fun recordNotifications(context: Context, userUuid: String, notifications: List<com.twocents.mobile.notifications.AppNotification>) {
+        if (notifications.none { it.type == "followed" || it.type == "followed_by" }) return
+        val appContext = context.applicationContext
+        scope.launch {
+            val snapshot = FollowersScanStore(appContext, userUuid).modify {
+                it.withFollowNotifications(userUuid, notifications)
+            }
+            update(userUuid) { it.copy(snapshot = snapshot) }
+        }
+    }
+
     fun clearStored(context: Context, userUuid: String) {
         if (states[userUuid]?.value?.running == true) return
         FollowersScanStore(context, userUuid).clear()
@@ -78,11 +90,11 @@ internal object FollowersScanner {
             val aliases = runCatching { api.call("/v1/aliases/get", JSONObject(), auth) as? JSONObject }
                 .getOrNull()?.aliasMap().orEmpty()
             if (aliases.isEmpty()) return@launch
-            val current = state(context, auth.userUuid).snapshot
-            val refreshed = current.copy(followers = current.followers.map { entry ->
-                entry.copy(alias = aliases[entry.profile.uuid] ?: entry.alias)
-            })
-            FollowersScanStore(context, auth.userUuid).write(refreshed)
+            val refreshed = FollowersScanStore(context, auth.userUuid).modify { current ->
+                current.copy(followers = current.followers.map { entry ->
+                    entry.copy(alias = aliases[entry.profile.uuid] ?: entry.alias)
+                })
+            }
             update(auth.userUuid) { it.copy(snapshot = refreshed) }
         }
     }
@@ -104,7 +116,9 @@ internal object FollowersScanner {
     }
 
     private suspend fun scan(context: Context, api: RpcApi, auth: AuthState) {
+        val scanStartedAt = System.currentTimeMillis()
         val candidates = LinkedHashSet<String>() // Deliberately case-sensitive.
+        candidates += FollowersScanStore(context, auth.userUuid).read().candidates
         candidates += auth.userUuid
         val (rooms, dms, aliases, boards) = coroutineScope {
             listOf(
@@ -153,8 +167,10 @@ internal object FollowersScanner {
         candidates.remove(auth.userUuid)
 
         val store = FollowersScanStore(context, auth.userUuid)
-        val previous = state(context, auth.userUuid).snapshot
-        store.write(previous.copy(candidates = candidates.toList()))
+        store.modify { previous ->
+            candidates += previous.candidates
+            previous.copy(candidates = candidates.toList())
+        }
         update(auth.userUuid) { it.copy(phase = "Checking who follows you…", completed = 0, total = candidates.size) }
         val followerUuids = ArrayList<String>()
         candidates.toList().chunked(12).forEachIndexed { batch, ids ->
@@ -176,8 +192,15 @@ internal object FollowersScanner {
             update(auth.userUuid) { it.copy(completed = ((batch + 1) * 8).coerceAtMost(followerUuids.size)) }
             delay(100)
         }
-        val snapshot = FollowersScanSnapshot(candidates.toList(), followers, System.currentTimeMillis())
-        store.write(snapshot)
+        val snapshot = store.modify { latest ->
+            // A follow arriving during the scan must survive its final write. Older
+            // followers absent from hasMe results are removed, but candidates are retained.
+            val merged = followers.associateByTo(linkedMapOf()) { it.profile.uuid }
+            latest.followers.filter { (latest.followEvents[it.profile.uuid] ?: 0L) > scanStartedAt }
+                .forEach { merged[it.profile.uuid] = it }
+            latest.copy(candidates = (candidates + latest.candidates).toList(),
+                followers = merged.values.toList(), completedAt = scanStartedAt)
+        }
         update(auth.userUuid) { it.copy(running = false, phase = "Complete", snapshot = snapshot, completed = followers.size, total = followers.size) }
         if (auth.userUuid !in visibleSheets) {
             toastIds.remove(auth.userUuid)?.let { AppToast.success("Found ${followers.size} followers", it) }

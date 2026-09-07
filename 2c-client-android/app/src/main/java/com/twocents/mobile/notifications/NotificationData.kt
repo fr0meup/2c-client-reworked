@@ -73,7 +73,7 @@ data class AppNotification(
             "actorBalance", "replierBalance", "voterBalance", "followerBalance",
         ).firstNotNullOfOrNull { meta[it]?.toDoubleOrNull() }
     val actorSubscriptionType: Int
-        get() = listOf("actor_subscription_type", "replier_subscription_type", "subscription_type", "subscriptionType").firstNotNullOfOrNull { meta[it]?.toIntOrNull() } ?: 0
+        get() = listOf("actor_subscription_type", "replier_subscription_type", "follower_subscription_type", "subscription_type", "subscriptionType").firstNotNullOfOrNull { meta[it]?.toIntOrNull() } ?: 0
 }
 
 @Immutable

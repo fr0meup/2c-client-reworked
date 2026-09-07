@@ -74,6 +74,7 @@ internal fun notificationActionLabel(type: String, downvote: Boolean): String = 
     "trending_post" -> "is trending"
     "poll_voted" -> "voted on your poll"
     "followed" -> "followed you"
+    "followed_by" -> "followed you from a post"
     "balance_updated" -> "balance update"
     else -> ""
 }

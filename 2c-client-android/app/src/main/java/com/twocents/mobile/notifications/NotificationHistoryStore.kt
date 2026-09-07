@@ -23,6 +23,7 @@ internal data class LocalActivitySummary(
 
 /** Durable, bounded notification ledger used for client-side activity history. */
 internal class NotificationHistoryStore(context: Context, private val userUuid: String) {
+    private val appContext = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val key = "history-$userUuid"
 
@@ -36,6 +37,7 @@ internal class NotificationHistoryStore(context: Context, private val userUuid: 
             )
         }
         writeUnlocked(merged.values)
+        com.twocents.mobile.ui.profile.FollowersScanner.recordNotifications(appContext, userUuid, incoming)
     }
 
     fun upsert(notification: AppNotification) = reconcile(listOf(notification))

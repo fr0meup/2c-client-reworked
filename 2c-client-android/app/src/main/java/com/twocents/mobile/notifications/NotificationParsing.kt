@@ -92,6 +92,7 @@ private val NOTIFICATION_TYPES = setOf(
     "trending_post",
     "poll_voted",
     "followed",
+    "followed_by",
     "generic",
     "balance_updated",
 )

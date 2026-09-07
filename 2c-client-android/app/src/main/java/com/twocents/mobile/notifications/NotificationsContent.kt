@@ -324,7 +324,7 @@ private fun NotificationIcon(type: String, downvote: Boolean, unread: Boolean) {
         "post_voted", "comment_voted" -> if (downvote) NotificationIcons.ArrowBigDown else NotificationIcons.ArrowBigUp
         "post_replied", "comment_replied", "room_reply" -> NotificationIcons.MessageSquareText
         "poll_voted" -> NotificationIcons.BarChart3
-        "followed" -> NotificationIcons.UserPlus
+        "followed", "followed_by" -> NotificationIcons.UserPlus
         "pick_resolved" -> NotificationIcons.CheckCircle2
         "pick_post" -> NotificationIcons.Target
         "trending_post", "balance_updated" -> NotificationIcons.TrendingUp

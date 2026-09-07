@@ -91,7 +91,7 @@ internal data class BackupCredentials(
     val createdAtMillis: Long,
 )
 
-/** Decodes the app-issued base64 payload: uuid:secret-key:unix-milliseconds. */
+/** Decodes uuid:secret-key:timestamp, accepting legacy milliseconds and decimal Unix seconds. */
 internal fun parseBackupCode(raw: String): BackupCredentials {
     val decoded = try {
         String(Base64.decode(raw.trim(), Base64.DEFAULT), StandardCharsets.UTF_8)
@@ -101,7 +101,16 @@ internal fun parseBackupCode(raw: String): BackupCredentials {
     val parts = decoded.split(':', limit = 3)
     val uuid = parts.getOrNull(0).orEmpty().trim()
     val secretKey = parts.getOrNull(1).orEmpty().trim()
-    val timestamp = parts.getOrNull(2)?.trim()?.toLongOrNull()
+    val timestamp = parts.getOrNull(2)?.trim()?.let { value ->
+        // Keep legacy integers unchanged. New decimal timestamps are seconds; use decimal
+        // arithmetic to avoid floating-point rounding and normalize to milliseconds.
+        value.toLongOrNull() ?: if (value.matches(Regex("[0-9]+\\.[0-9]+"))) {
+            runCatching {
+                value.toBigDecimal().movePointRight(3)
+                    .setScale(0, java.math.RoundingMode.DOWN).longValueExact()
+            }.getOrNull()
+        } else null
+    }
     if (!uuid.matches(Regex("[0-9a-fA-F-]{36}")) || secretKey.isBlank() || timestamp == null) {
         throw LoginInputException("That backup code isn't valid. Generate a new one in the official twocents app.")
     }
