@@ -143,6 +143,8 @@ internal fun FeedVideoSurface(
     onToggleLandscape: () -> Unit,
     onCycleSpeed: () -> Unit,
     modifier: Modifier,
+    errorMessage: String? = null,
+    onRetry: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -201,6 +203,22 @@ internal fun FeedVideoSurface(
             modifier = Modifier.fillMaxSize(),
         )
 
+        // Keep the failed player at its original dimensions and intercept its taps.
+        if (errorMessage != null) {
+            Column(
+                Modifier.fillMaxSize().background(MediaBackground).clickable(onClick = {}).padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(errorMessage, color = Color.White.copy(alpha = .78f), fontSize = 13.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("Retry", color = Color(0xFFC7A653), fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable(onClick = onRetry).padding(12.dp))
+                if (fullscreen) Text("Close fullscreen", color = Color.White,
+                    modifier = Modifier.clickable(onClick = onToggleFullscreen).padding(8.dp))
+            }
+            return@Box
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()

@@ -28,9 +28,13 @@ internal fun normalizeNotification(
     } ?: return null
     val uuid = source.firstString("uuid", "notification_uuid", "notificationUuid", "notification_id", "id")
         ?: return null
-    val metaObject = source.optJSONObject("notification_meta")
-        ?: source.optJSONObject("notificationMeta")
-        ?: source.optJSONObject("meta")
+    val metaObject = listOf("notification_meta", "notificationMeta", "meta").firstNotNullOfOrNull { key ->
+        when (val value = source.opt(key)) {
+            is JSONObject -> value
+            is String -> runCatching { JSONObject(value) }.getOrNull()
+            else -> null
+        }
+    }
         ?: source
     val meta = buildMap {
         listOf(source, metaObject).forEach { objectValue ->
@@ -38,7 +42,7 @@ internal fun normalizeNotification(
             while (keys.hasNext()) {
                 val key = keys.next()
                 val value = objectValue.opt(key)
-                if (value is String && value.isNotBlank()) put(key, value)
+                if (value is String && value.isNotBlank() && value != "null") put(key, value)
                 if (value is Number) put(key, value.toString())
             }
         }

@@ -64,8 +64,10 @@ data class AppNotification(
             "voter_uuid", "follower_uuid", "replier_uuid", "actor_uuid", "author_uuid", "user_uuid",
             "from_user_uuid", "sender_uuid", "comment_author_uuid", "post_author_uuid",
             "voterUuid", "followerUuid", "replierUuid", "actorUuid", "authorUuid", "fromUserUuid",
-        ).firstNotNullOfOrNull { meta[it]?.takeIf(String::isNotBlank) }
-            ?.takeUnless { it == userUuid }
+        ).firstNotNullOfOrNull { key ->
+            // Recipient fields must not hide a later, valid sender field.
+            meta[key]?.trim()?.takeUnless { it.isEmpty() || it == "null" || it == userUuid }
+        }
     val actorBalance: Double?
         get() = listOf(
             "actor_balance", "replier_balance", "voter_balance", "follower_balance", "author_balance",
@@ -158,8 +160,13 @@ class NotificationController(
             parseNotifications(root.optJSONArray("notifications"))
         }.onSuccess { notifications ->
             loadedAt = System.currentTimeMillis()
+            val previous = state.notifications.associateBy { it.uuid }
             val merged = notifications.map { item ->
-                locallyReadAt[item.uuid]?.let { markedAt -> item.copy(readAt = markedAt) } ?: item
+                // Read-state refreshes can omit actor metadata already received by push.
+                item.copy(
+                    meta = previous[item.uuid]?.meta.orEmpty() + item.meta,
+                    readAt = locallyReadAt[item.uuid] ?: item.readAt,
+                )
             }
             history.reconcile(merged)
             state = NotificationUiState(notifications = merged)

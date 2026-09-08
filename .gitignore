@@ -1,3 +1,6 @@
+# Web client stays local until ready for publication
+/2c-client-web/
+
 # Gradle and Kotlin build state
 .gradle/
 .kotlin/

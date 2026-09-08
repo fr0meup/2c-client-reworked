@@ -61,6 +61,7 @@ internal fun FollowersSheet(
     onDismiss: () -> Unit,
     initialListIndex: Int = 0,
     initialListOffset: Int = 0,
+    visible: Boolean = true,
     onOpenProfile: (String, ComposeAuthorProfile, Int, Int) -> Unit,
 ) {
     val context = LocalContext.current
@@ -86,8 +87,8 @@ internal fun FollowersSheet(
 
     LaunchedEffect(Unit) { sheetOffset.animateTo(0f, tween(210)) }
     LaunchedEffect(auth.userUuid) { FollowersScanner.refreshAliases(context, api, auth) }
-    DisposableEffect(auth.userUuid) {
-        FollowersScanner.setSheetVisible(auth.userUuid, true)
+    DisposableEffect(auth.userUuid, visible) {
+        FollowersScanner.setSheetVisible(auth.userUuid, visible)
         onDispose { FollowersScanner.setSheetVisible(auth.userUuid, false) }
     }
 
@@ -109,6 +110,8 @@ internal fun FollowersSheet(
         }
     }
 
+    // Hiding is not dismissal: keep scan UI and list position through profile navigation.
+    if (!visible) return
     Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         EdgeToEdgeDialogWindow(navigationBarColor = AndroidColor.TRANSPARENT)
         val openFraction = (1f - sheetOffset.value / dismissDistancePx).coerceIn(0f, 1f)
@@ -205,7 +208,7 @@ internal fun FollowersSheet(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).clickable {
                                 val index = listState.firstVisibleItemIndex
                                 val offset = listState.firstVisibleItemScrollOffset
-                                close { onOpenProfile(entry.profile.uuid, entry.profile, index, offset) }
+                                onOpenProfile(entry.profile.uuid, entry.profile, index, offset)
                             }.padding(horizontal = 6.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(7.dp),

@@ -75,12 +75,12 @@ private val CardBorder = Color.White.copy(alpha = 0.08f)
 private val noFontPaddingStyle = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
 
 @Composable
-internal fun FeedNetworthPill(post: FeedPost, compact: Boolean) {
-    UserNetworthPill(post.toUserDisplay(), compact)
+internal fun FeedNetworthPill(post: FeedPost, compact: Boolean, navigationEnabled: Boolean = true) {
+    UserNetworthPill(post.toUserDisplay(), compact, navigationEnabled)
 }
 
 @Composable
-internal fun UserNetworthPill(user: UserDisplayModel, compact: Boolean) {
+internal fun UserNetworthPill(user: UserDisplayModel, compact: Boolean, navigationEnabled: Boolean = true) {
     val view = LocalView.current
     Box(
         Modifier
@@ -89,6 +89,8 @@ internal fun UserNetworthPill(user: UserDisplayModel, compact: Boolean) {
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null,
             ) {
+                // Consume this tap without opening the parent post or duplicating its profile.
+                if (!navigationEnabled) return@clickable
                 AppHaptics.navigate(view)
                 ProfileNavigationBus.open(
                     ComposeAuthorProfile(
@@ -118,4 +120,3 @@ internal fun UserNetworthPill(user: UserDisplayModel, compact: Boolean) {
         )
     }
 }
-

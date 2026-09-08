@@ -144,6 +144,7 @@ internal fun ActiveFeedVideoPlayer(
     var pausedForDetailOverlay by remember(safeUri) { mutableStateOf(false) }
     var isPlaying by remember(safeUri) { mutableStateOf(false) }
     var isBuffering by remember(safeUri) { mutableStateOf(false) }
+    var playbackError by remember(safeUri) { mutableStateOf<String?>(null) }
     var controlsVisible by remember(safeUri) { mutableStateOf(true) }
     var thumbnailVisible by remember(safeUri) { mutableStateOf(true) }
     var fullscreen by remember(safeUri) { mutableStateOf(false) }
@@ -173,6 +174,11 @@ internal fun ActiveFeedVideoPlayer(
 
     DisposableEffect(player, lifecycleOwner) {
         val listener = object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                playbackError = "Couldn't load this video. Check your connection or try again."
+                isBuffering = false
+                controlsVisible = true
+            }
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
                 if (handoff.owner === owner) {
@@ -214,6 +220,7 @@ internal fun ActiveFeedVideoPlayer(
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) player.pause()
         }
         player.addListener(listener)
+        player.playerError?.let(listener::onPlayerError)
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             if (handoff.owner === owner) {
@@ -323,6 +330,10 @@ internal fun ActiveFeedVideoPlayer(
     }
 
     fun togglePlayback() {
+        if (playbackError != null) {
+            playbackError = null
+            player.prepare()
+        }
         controlsVisible = true
         if (player.isPlaying) {
             handoff.positionMs = player.currentPosition.coerceAtLeast(0L)
@@ -354,6 +365,8 @@ internal fun ActiveFeedVideoPlayer(
             val playerHeight = maxWidth / safeRatio
             FeedVideoSurface(
                 videoUri = safeUri,
+                errorMessage = playbackError,
+                onRetry = ::togglePlayback,
                 player = player,
                 thumbnailModel = thumbnailModel,
                 isPlaying = isPlaying,
@@ -403,6 +416,8 @@ internal fun ActiveFeedVideoPlayer(
             FullscreenSystemUi()
             FeedVideoSurface(
                 videoUri = safeUri,
+                errorMessage = playbackError,
+                onRetry = ::togglePlayback,
                 player = player,
                 thumbnailModel = thumbnailModel,
                 isPlaying = isPlaying,

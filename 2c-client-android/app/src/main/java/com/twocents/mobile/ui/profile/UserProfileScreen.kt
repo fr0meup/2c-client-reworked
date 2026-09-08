@@ -222,6 +222,7 @@ fun UserProfileContent(
                 items(posts, key = { it.uuid }, contentType = { it.recycleType }) { post ->
                     FeedPostCard(
                         post = post,
+                        authorNavigationEnabled = post.authorUuid != targetUuid,
                         authUuid = auth.userUuid,
                         currentVote = state.votes[post.uuid] ?: 0,
                         alias = feedController.state.aliases[post.authorUuid] ?: post.author.alias,
@@ -259,8 +260,9 @@ fun UserProfileContent(
             }
         }
     }
-    if (followingOpen && navigationActive) {
+    if (followingOpen) {
         FollowingSheet(
+            visible = navigationActive,
             auth = auth,
             api = api,
             onDismiss = { followingOpen = false },
@@ -273,8 +275,9 @@ fun UserProfileContent(
             },
         )
     }
-    if (followersOpen && navigationActive) {
+    if (followersOpen) {
         FollowersSheet(
+            visible = navigationActive,
             auth = auth,
             api = api,
             onDismiss = { followersOpen = false },

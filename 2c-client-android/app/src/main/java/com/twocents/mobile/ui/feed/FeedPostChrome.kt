@@ -88,6 +88,7 @@ internal fun FeedPostHeader(
     onQuotePost: ((FeedPost) -> Unit)?,
     onOpenMessages: (() -> Unit)?,
     onDeleted: (() -> Unit)?,
+    authorNavigationEnabled: Boolean = true,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(
@@ -95,7 +96,7 @@ internal fun FeedPostHeader(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FeedNetworthPill(post, compact = true)
+            FeedNetworthPill(post, compact = true, navigationEnabled = authorNavigationEnabled)
             HeaderMetaText(feedTimeAgo(post.createdAt))
             HeaderDot()
             FeedPlatformIcon(post.meta.platform)
@@ -445,5 +446,4 @@ internal fun feedTimeAgo(raw: String): String {
 
 
 private const val LOCATION_ICON_URL = "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Flocation-icon.432s1sddmkeug.png&w=48&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"
-
 

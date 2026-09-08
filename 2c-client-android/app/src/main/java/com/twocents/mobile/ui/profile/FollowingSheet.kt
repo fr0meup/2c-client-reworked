@@ -67,6 +67,7 @@ internal fun FollowingSheet(
     onDismiss: () -> Unit,
     initialListIndex: Int = 0,
     initialListOffset: Int = 0,
+    visible: Boolean = true,
     onOpenProfile: (String, ComposeAuthorProfile, Int, Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -135,6 +136,8 @@ internal fun FollowingSheet(
         loading = false
     }
 
+    // Retain the loaded rows and exact LazyListState while a profile is on top.
+    if (!visible) return
     Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         EdgeToEdgeDialogWindow(navigationBarColor = AndroidColor.TRANSPARENT)
         val openFraction = (1f - sheetOffset.value / dismissDistancePx).coerceIn(0f, 1f)
@@ -191,7 +194,7 @@ internal fun FollowingSheet(
                         items(entries, key = { it.profile.uuid }) { entry ->
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).clickable {
-                                    close { onOpenProfile(entry.profile.uuid, entry.profile, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
+                                    onOpenProfile(entry.profile.uuid, entry.profile, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
                                 }.padding(horizontal = 6.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(7.dp),

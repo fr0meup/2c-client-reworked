@@ -137,8 +137,10 @@ private fun PickButton(vote: String, selected: String?, modifier: Modifier, onVo
 @Composable
 internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null) {
     val content = remember(quote.uuid, quote.text, quote.meta.giphyUrl) { prepareFeedPostContent(quote) }
+    val tweetUrl = quote.meta.tweetUrl ?: commentTweetUrl(quote.meta.link.orEmpty()) ?: commentTweetUrl(quote.text)
+    val quoteText = if (tweetUrl != null) stripEmbeddedTweetLink(content.visibleText, tweetUrl) else content.visibleText
     var expanded by remember(quote.uuid) { mutableStateOf(false) }
-    val displayedText = if (expanded || !content.isLong) content.visibleText else content.visibleText.take(400).trimEnd()
+    val displayedText = if (expanded || quoteText.length <= 400) quoteText else quoteText.take(400).trimEnd()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -170,6 +172,7 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null) {
             )
         }
         val videoUrl = quote.meta.videoUrl
+        tweetUrl?.let { TweetEmbedCard(it) }
         com.twocents.mobile.ui.common.LinkPreviewCards(quote.text, quote.meta.link)
         if (!videoUrl.isNullOrBlank()) {
             FeedVideoPlayer(videoUrl, compact = true)
@@ -207,4 +210,3 @@ internal fun FeedLinkCard(url: String) {
         Icon(Icons.Outlined.OpenInNew, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
     }
 }
-

@@ -133,6 +133,7 @@ internal fun TweetEmbedCard(tweetUrl: String) {
 
 @Composable
 private fun NativeTweetContent(tweet: NativeTweet, nested: Boolean = false) {
+    val context = LocalContext.current
     var expanded by remember(tweet.url, tweet.text) { mutableStateOf(false) }
     val shouldTruncate = tweet.text.length > 400
     val visibleText = if (shouldTruncate && !expanded) tweet.text.take(400).trimEnd() + "…" else tweet.text
@@ -163,6 +164,9 @@ private fun NativeTweetContent(tweet: NativeTweet, nested: Boolean = false) {
             lineHeight = if (nested) 19.sp else 21.sp,
             modifier = Modifier.padding(top = 12.dp),
             linkColor = Color(0xFF1D9BF0),
+            // LinkifiedText owns text taps when media contributes a t.co link.
+            // Plain text should still open X; image children keep their lightbox clicks.
+            onTextClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(tweet.url))) } },
         )
         if (shouldTruncate) {
             Text(

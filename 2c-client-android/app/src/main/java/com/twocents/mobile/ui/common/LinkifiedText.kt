@@ -34,6 +34,7 @@ fun LinkifiedText(
     fontStyle: FontStyle? = null,
     linkColor: androidx.compose.ui.graphics.Color = Gold,
     maxLines: Int = Int.MAX_VALUE,
+    onTextClick: (() -> Unit)? = null,
 ) {
     val uriHandler = LocalUriHandler.current
     val annotated = remember(text, linkColor) { linkify(text, linkColor) }
@@ -54,7 +55,8 @@ fun LinkifiedText(
             maxLines = maxLines,
             style = style,
             onClick = { offset ->
-                annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item?.let { raw ->
+                val raw = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item
+                if (raw == null) onTextClick?.invoke() else {
                     val mentionUuid = raw.removePrefix("mention:").takeIf { raw.startsWith("mention:") }
                     if (mentionUuid != null) ProfileNavigationBus.open(mentionUuid)
                     else {

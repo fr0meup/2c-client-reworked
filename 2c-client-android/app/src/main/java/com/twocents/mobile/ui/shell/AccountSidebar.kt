@@ -105,7 +105,10 @@ internal fun AccountSidebar(
     onOfflineModeChanged: (Boolean) -> Unit,
     onLogout: () -> Unit,
 ) {
-    if (progress <= .001f) return
+    var followingOpen by remember(auth.userUuid) { mutableStateOf(false) }
+    var followersOpen by remember(auth.userUuid) { mutableStateOf(false) }
+    // Keep suspended people sheets alive after closing their source sidebar.
+    if (progress <= .001f && !followingOpen && !followersOpen) return
     val context = LocalContext.current
     val view = LocalView.current
     val cached = remember(auth.userUuid) { SidebarDisplayCache.read(context, auth.userUuid) }
@@ -120,8 +123,6 @@ internal fun AccountSidebar(
     val historyStore = remember(auth.userUuid) { NotificationHistoryStore(context, auth.userUuid) }
     var offlineMode by remember(auth.userUuid) { mutableStateOf(OfflineModeStore.isEnabled(context, auth.userUuid)) }
     var verifiedOnly by remember(auth.userUuid) { mutableStateOf(VerifiedContentFilterStore.isEnabled(context, auth.userUuid)) }
-    var followingOpen by remember(auth.userUuid) { mutableStateOf(false) }
-    var followersOpen by remember(auth.userUuid) { mutableStateOf(false) }
     var peopleListIndex by remember(auth.userUuid) { mutableIntStateOf(0) }
     var peopleListOffset by remember(auth.userUuid) { mutableIntStateOf(0) }
     var recentActivity by remember(auth.userUuid) { mutableStateOf(cached.recentActivity) }
@@ -210,7 +211,8 @@ internal fun AccountSidebar(
         resolved.toUserDisplay(nickname = resolvedAlias, elo = elo)
     }
 
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    // A suspended sheet must not leave the sidebar's invisible tap catcher on screen.
+    if (progress > .001f) BoxWithConstraints(modifier.fillMaxSize()) {
         val width = (maxWidth - AccountSidebarRevealWidth).coerceAtLeast(260.dp)
         val widthPx = with(LocalDensity.current) { width.toPx() }
         val closeDragModifier = Modifier.pointerInput(widthPx) {
@@ -349,8 +351,9 @@ internal fun AccountSidebar(
             Spacer(Modifier.height(navigationBarPadding + 22.dp))
         }
     }
-    if (followingOpen && navigationActive) {
+    if (followingOpen) {
         FollowingSheet(
+            visible = navigationActive,
             auth = auth,
             api = api,
             onDismiss = { followingOpen = false },
@@ -360,12 +363,14 @@ internal fun AccountSidebar(
                 peopleListIndex = index
                 peopleListOffset = offset
                 followingOpen = true
+                onDismiss()
                 ProfileNavigationBus.open(selectedProfile)
             },
         )
     }
-    if (followersOpen && navigationActive) {
+    if (followersOpen) {
         FollowersSheet(
+            visible = navigationActive,
             auth = auth,
             api = api,
             onDismiss = { followersOpen = false },
@@ -374,6 +379,7 @@ internal fun AccountSidebar(
             onOpenProfile = { _, selectedProfile, index, offset ->
                 peopleListIndex = index
                 peopleListOffset = offset
+                onDismiss()
                 ProfileNavigationBus.open(selectedProfile)
             },
         )

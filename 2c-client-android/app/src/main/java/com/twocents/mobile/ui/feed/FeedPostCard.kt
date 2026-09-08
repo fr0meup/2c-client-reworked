@@ -107,6 +107,7 @@ internal fun FeedPostCard(
     showMenu: Boolean = true,
     detailMode: Boolean = false,
     parentScrolling: () -> Boolean = { false },
+    authorNavigationEnabled: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -157,6 +158,7 @@ internal fun FeedPostCard(
                 onQuotePost = onQuotePost,
                 onOpenMessages = onOpenMessages,
                 onDeleted = onDeleted,
+                authorNavigationEnabled = authorNavigationEnabled,
             )
 
             if (post.title.isNotBlank()) {
@@ -280,7 +282,7 @@ private val EmbeddedTweetRawLink = Regex(
     RegexOption.IGNORE_CASE,
 )
 
-private fun stripEmbeddedTweetLink(text: String, detectedUrl: String): String = text
+internal fun stripEmbeddedTweetLink(text: String, detectedUrl: String): String = text
     .replace(EmbeddedTweetMarkdownLink, "")
     .replace(EmbeddedTweetRawLink, "")
     .replace(detectedUrl, "")
