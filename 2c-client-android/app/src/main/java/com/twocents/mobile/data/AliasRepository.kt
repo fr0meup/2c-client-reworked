@@ -30,4 +30,15 @@ internal class AliasRepository(private val api: RpcApi, private val auth: AuthSt
         val updated = if (!succeeded) current else if (following) current - userUuid else current + (userUuid to alias)
         return succeeded to updated
     }
+
+    /** Explicit assignment also edits an existing alias; toggling would unfollow instead. */
+    suspend fun setSelfFollowing(nickname: String?) {
+        val alias = nickname?.trim()
+        require(alias == null || alias.isNotEmpty()) { "Enter a nickname" }
+        api.call(
+            if (alias == null) "/v1/aliases/unset" else "/v1/aliases/set",
+            JSONObject().put("for_uuid", auth.userUuid).apply { if (alias != null) put("alias", alias) },
+            auth,
+        )
+    }
 }

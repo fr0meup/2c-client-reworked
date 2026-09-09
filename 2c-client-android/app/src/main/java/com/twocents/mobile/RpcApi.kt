@@ -55,6 +55,9 @@ class RpcApi(
         }
 
         response.use { httpResponse ->
+            if (httpResponse.code == 429) {
+                throw ApiException(ApiRateLimitNotice.report())
+            }
             val body = httpResponse.body?.string().orEmpty()
             if (!httpResponse.isSuccessful) {
                 throw ApiException("HTTP ${httpResponse.code}: ${body.take(500)}")
@@ -73,6 +76,9 @@ class RpcApi(
                     ?.takeIf(String::isNotBlank)
                     ?: root.optString("error").trim().takeIf(String::isNotBlank)
                     ?: "The request was rejected"
+                if (rpcError?.optInt("code") == 429 || ApiRateLimitNotice.matches(message)) {
+                    throw ApiException(ApiRateLimitNotice.report())
+                }
                 throw ApiException(message)
             }
 

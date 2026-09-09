@@ -49,6 +49,7 @@ data class FeedPostMeta(
     val totalAllocated: Double = 0.0,
     val totalSpent: Double = 0.0,
     val budgetCategories: List<FeedBudgetCategory> = emptyList(),
+    val priceHistory: List<Double> = emptyList(),
 )
 
 @Immutable
@@ -89,6 +90,8 @@ data class FeedPicksResult(
     val noPercent: Int = 50,
     val resolved: Boolean = false,
     val correctAnswer: String? = null,
+    val yesAverageBalance: Double? = null,
+    val noAverageBalance: Double? = null,
 )
 
 @Immutable

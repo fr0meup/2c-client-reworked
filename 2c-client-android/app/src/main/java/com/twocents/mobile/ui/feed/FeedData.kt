@@ -334,14 +334,18 @@ class FeedController(
         val key = "picks-result:$postUuid"
         if ((!force && picksResultsCache.containsKey(postUuid)) || !pendingResults.add(key)) return
         runCatching {
-            val root = api.call("/v1/posts/getPicksResults", JSONObject().put("post_uuid", postUuid), auth) as? JSONObject
-            val results = root?.optJSONObject("results")
-            val yes = results?.number("yes_percent")?.toDouble()?.toInt()?.coerceIn(0, 100) ?: 50
+            // Same endpoint/schema as the web client; never cache an empty success.
+            val root = api.call("/v1/picks/results", JSONObject().put("post_uuid", postUuid), auth) as? JSONObject
+                ?: error("Invalid pick results")
+            val results = root.optJSONObject("results") ?: error("Missing pick results")
+            val yes = results.number("yes_percent")?.toDouble()?.toInt()?.coerceIn(0, 100) ?: 0
             FeedPicksResult(
                 yesPercent = yes,
-                noPercent = 100 - yes,
+                noPercent = results.number("no_percent")?.toDouble()?.toInt()?.coerceIn(0, 100) ?: (100 - yes),
                 resolved = root?.string("resolution_status") == "resolved",
                 correctAnswer = root?.string("correct_answer"),
+                yesAverageBalance = results?.optJSONObject("yes")?.number("average_balance")?.toDouble()?.takeIf(Double::isFinite),
+                noAverageBalance = results?.optJSONObject("no")?.number("average_balance")?.toDouble()?.takeIf(Double::isFinite),
             )
         }.getOrNull()?.let { result ->
             picksResultsCache[postUuid] = result

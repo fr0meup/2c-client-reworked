@@ -63,6 +63,7 @@ private val EditSurface = Color(0xFF0F0E0A)
 
 @Composable
 internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorProfile?, onDismiss: () -> Unit, onSaved: (ComposeAuthorProfile) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var bio by remember { mutableStateOf("") }
     var age by remember { mutableStateOf(seed?.age?.toString().orEmpty()) }
     var gender by remember { mutableStateOf(seed?.gender.orEmpty()) }
@@ -71,6 +72,13 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
     var original by remember { mutableStateOf(listOf("", age, gender, arena)) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
+    val aliasRepository = remember(api, auth) { com.twocents.mobile.data.AliasRepository(api, auth) }
+    var selfFollowAvailable by remember { mutableStateOf(false) }
+    var originalSelfAlias by remember { mutableStateOf<String?>(null) }
+    var followSelf by remember { mutableStateOf(false) }
+    var selfNickname by remember { mutableStateOf("") }
+    val selfFollowDirty = selfFollowAvailable && (followSelf != (originalSelfAlias != null) ||
+        (followSelf && selfNickname.trim() != originalSelfAlias))
     var error by remember { mutableStateOf<String?>(null) }
     var confirmClose by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -79,7 +87,7 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
     val dismissThresholdPx = with(density) { 90.dp.toPx() }
     val dragOffset = remember { Animatable(dismissDistancePx) }
     var closing by remember { mutableStateOf(false) }
-    val dirty by remember { derivedStateOf { listOf(bio, age, gender, arena) != original } }
+    val dirty = listOf(bio, age, gender, arena) != original || selfFollowDirty
 
     fun performClose() {
         if (closing) return
@@ -89,7 +97,7 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
             onDismiss()
         }
     }
-    fun requestClose() { if (dirty) confirmClose = true else performClose() }
+    fun requestClose() { if (saving) return; if (dirty) confirmClose = true else performClose() }
     fun settleDrag() { scope.launch { dragOffset.animateTo(0f, tween(180)) } }
     LaunchedEffect(Unit) { dragOffset.animateTo(0f, tween(220)) }
 
@@ -102,6 +110,12 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                 arena = user.optString("arena")
             }
         original = listOf(bio, age, gender, arena)
+        runCatching { aliasRepository.load() }.onSuccess { aliases ->
+            originalSelfAlias = aliases[auth.userUuid]
+            followSelf = originalSelfAlias != null
+            selfNickname = originalSelfAlias.orEmpty()
+            selfFollowAvailable = true
+        }
         cityCatalog = runCatching {
             val root = api.call("/v1/info/cities", JSONObject(), auth) as? JSONObject
             val cities = root?.optJSONObject("cities") ?: return@runCatching emptyMap()
@@ -117,17 +131,19 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
         loading = false
     }
 
-    val dragModifier = Modifier.pointerInput(dirty) {
+    val dragModifier = Modifier.pointerInput(dirty, saving) {
         detectVerticalDragGestures(
             onDragStart = { confirmClose = false },
             onVerticalDrag = { change, amount ->
+                if (saving) return@detectVerticalDragGestures
                 if (amount > 0f || dragOffset.value > 0f) {
                     change.consume()
                     scope.launch { dragOffset.snapTo((dragOffset.value + amount).coerceAtLeast(0f)) }
                 }
             },
             onDragEnd = {
-                if (dragOffset.value > dismissThresholdPx) {
+                if (saving) settleDrag()
+                else if (dragOffset.value > dismissThresholdPx) {
                     if (dirty) { confirmClose = true; settleDrag() } else performClose()
                 } else settleDrag()
             },
@@ -157,7 +173,7 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                         Text("Edit profile", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         Text(if (dirty) "Unsaved changes" else "Make your profile yours", color = if (dirty) EditGold.copy(alpha = .75f) else Color.White.copy(alpha = .38f), fontSize = 11.sp)
                     }
-                    EditDismissControl(confirmClose, onExpand = { if (dirty) confirmClose = true else performClose() }, onConfirm = ::performClose)
+                    EditDismissControl(confirmClose, onExpand = ::requestClose, onConfirm = { if (!saving) performClose() })
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = .07f)))
                 if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), color = EditGold, strokeWidth = 2.dp) }
@@ -196,6 +212,11 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                             )
                             Text("This is shown in your user meta pill.", color = Color.White.copy(alpha = .28f), fontSize = 10.sp)
                         }
+                        EditSection(Icons.Outlined.PersonOutline, "Your nickname") {
+                            SelfFollowEditor(followSelf, selfNickname, selfFollowAvailable, saving,
+                                onFollowingChanged = { followSelf = it; confirmClose = false },
+                                onNicknameChanged = { selfNickname = it; confirmClose = false })
+                        }
                         error?.let { Text(it, color = Color(0xFFFB7185), fontSize = 11.5.sp, modifier = Modifier.padding(horizontal = 5.dp)) }
                     }
                     Column(Modifier.fillMaxWidth().background(EditSurface).padding(start = 14.dp, top = 9.dp, end = 14.dp, bottom = saveBottomPadding)) {
@@ -204,11 +225,28 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                                 .clickable(enabled = dirty && !saving) {
                                     scope.launch {
                                         saving = true; error = null
+                                        if (followSelf && selfNickname.isBlank()) { error = "Enter a nickname to follow yourself"; saving = false; return@launch }
                                         val parsedAge = age.toIntOrNull()?.takeIf { it in 13..120 }
                                         if (age.isNotBlank() && parsedAge == null) { error = "Enter an age between 13 and 120"; saving = false; return@launch }
                                         val params = JSONObject().put("bio", bio.trim()).put("arena", arena.trim()).put("gender", gender).put("balance", seed?.balance ?: 0.0)
                                         if (parsedAge != null) params.put("age", parsedAge)
-                                        runCatching { api.call("/v1/users/update", params, auth) }
+                                        val savedFields = listOf(bio, age, gender, arena)
+                                        val aliasChanged = selfFollowDirty
+                                        val savedAlias = selfNickname.trim().takeIf { followSelf }
+                                        runCatching {
+                                            // Independent endpoints: retain each successful baseline if the other fails.
+                                            if (savedFields != original) {
+                                                api.call("/v1/users/update", params, auth)
+                                                original = savedFields
+                                            }
+                                            if (aliasChanged) {
+                                                aliasRepository.setSelfFollowing(savedAlias)
+                                                FollowersScanner.recordSelfFollow(context,
+                                                    (seed ?: ComposeAuthorProfile(auth.userUuid)).copy(age = parsedAge,
+                                                        gender = gender.ifBlank { null }, arena = arena.trim().ifBlank { null }), savedAlias)
+                                                originalSelfAlias = savedAlias
+                                            }
+                                        }
                                             .onSuccess {
                                                 original = listOf(bio, age, gender, arena)
                                                 onSaved((seed ?: ComposeAuthorProfile(auth.userUuid)).copy(age = parsedAge, gender = gender.ifBlank { null }, arena = arena.trim().ifBlank { null }))
@@ -236,7 +274,7 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
     content()
 }
 
-@Composable private fun EditField(label: String, value: String, onChange: (String) -> Unit, placeholder: String = "", singleLine: Boolean = true, minHeight: Dp = 38.dp, centered: Boolean = false) = Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+@Composable internal fun EditField(label: String, value: String, onChange: (String) -> Unit, placeholder: String = "", singleLine: Boolean = true, minHeight: Dp = 38.dp, centered: Boolean = false) = Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
     Text(label, color = Color.White.copy(alpha = .42f), fontSize = 10.5.sp)
     BasicTextField(value, onChange, singleLine = singleLine, textStyle = TextStyle(color = Color.White.copy(alpha = .9f), fontSize = 13.sp, lineHeight = 18.sp, textAlign = if (centered) TextAlign.Center else TextAlign.Start), cursorBrush = SolidColor(EditGold),
         modifier = Modifier.fillMaxWidth()

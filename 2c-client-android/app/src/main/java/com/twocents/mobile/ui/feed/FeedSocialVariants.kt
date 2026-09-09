@@ -81,57 +81,7 @@ internal fun FeedPicksCard(
     ensureResults: () -> Unit,
 ) {
     LaunchedEffect(post.uuid) { ensureResults() }
-    val picks = result ?: FeedPicksResult()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(CardSurface)
-            .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(Modifier.fillMaxWidth().height(30.dp).clip(RoundedCornerShape(8.dp))) {
-            Box(
-                Modifier.weight(picks.yesPercent.coerceAtLeast(1).toFloat()).fillMaxHeight().background(Emerald.copy(alpha = 0.35f)).padding(start = 8.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) { Text("${picks.yesPercent}% Yes", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold) }
-            Box(
-                Modifier.weight(picks.noPercent.coerceAtLeast(1).toFloat()).fillMaxHeight().background(Rose.copy(alpha = 0.35f)).padding(end = 8.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) { Text("${picks.noPercent}% No", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold) }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            post.meta.resolutionDeadline?.let {
-                Text("Resolves: ${formatDeadline(it)}", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
-            }
-            if (picks.resolved) Text("Resolved: ${picks.correctAnswer?.uppercase()}", color = if (picks.correctAnswer == "yes") Emerald else Rose, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
-        if (!picks.resolved) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PickButton("yes", userVote, Modifier.weight(1f), onVote)
-                PickButton("no", userVote, Modifier.weight(1f), onVote)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PickButton(vote: String, selected: String?, modifier: Modifier, onVote: (String) -> Unit) {
-    val color = if (vote == "yes") Emerald else Rose
-    val active = selected == vote
-    Box(
-        modifier
-            .height(36.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(color.copy(alpha = if (active) 0.25f else 0.08f))
-            .border(1.dp, color.copy(alpha = if (active) 1f else 0.3f), RoundedCornerShape(10.dp))
-            .clickable(enabled = selected == null) { onVote(vote) },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(if (active) "✓ Voted ${vote.replaceFirstChar { it.uppercase() }}" else "Vote ${vote.replaceFirstChar { it.uppercase() }}", color = color, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
-    }
+    PicksCardContent(post, userVote, result, onVote)
 }
 
 @Composable
@@ -177,7 +127,9 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null) {
         if (!videoUrl.isNullOrBlank()) {
             FeedVideoPlayer(videoUrl, compact = true)
         } else if (quote.meta.images.isNotEmpty()) {
-            FeedPostMedia(quote.meta.images, compact = true)
+            // Scale each carousel image to the quote's width, preserving its ratio
+            // and full content. Leave single-image quotes on their existing path.
+            FeedPostMedia(quote.meta.images, compact = true, preserveFullImage = quote.meta.images.size > 1)
         }
     }
 }

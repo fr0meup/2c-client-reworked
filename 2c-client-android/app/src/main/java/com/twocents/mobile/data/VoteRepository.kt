@@ -13,7 +13,8 @@ internal class VoteRepository(private val api: RpcApi, private val auth: AuthSta
     )
     suspend fun poll(postUuid: String, option: Int): Boolean = call("/v1/polls/vote", JSONObject().put("post_uuid", postUuid).put("option", option))
     suspend fun likert(postUuid: String, option: Int): Boolean = call("/v1/likert/vote", JSONObject().put("postUuid", postUuid).put("post_uuid", postUuid).put("option", option))
-    suspend fun pick(postUuid: String, vote: String): Boolean = call("/v1/posts/votePick", JSONObject().put("post_uuid", postUuid).put("vote", vote))
+    suspend fun pick(postUuid: String, vote: String): Boolean =
+        call("/v1/picks/vote", JSONObject().put("post_uuid", postUuid).put("vote", vote))
 
     private suspend fun call(method: String, params: JSONObject): Boolean = runCatching {
         api.call(method, params, auth)

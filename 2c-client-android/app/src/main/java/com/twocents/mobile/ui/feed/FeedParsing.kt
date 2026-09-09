@@ -115,6 +115,9 @@ internal fun parseFeedPost(root: JSONObject, depth: Int = 0): FeedPost? {
             tweetUrl = meta?.string("tweet_url") ?: meta?.string("tweetUrl"),
             question = meta?.string("question"),
             resolutionDeadline = meta?.string("resolution_deadline"),
+            priceHistory = meta?.optJSONArray("price_history").objects().mapNotNull {
+                it.nullableDouble("price")?.takeIf(Double::isFinite)
+            },
             merchant = meta?.string("merchant"),
             category = meta?.string("category"),
             date = meta?.string("date"),

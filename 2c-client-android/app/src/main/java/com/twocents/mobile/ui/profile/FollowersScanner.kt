@@ -56,6 +56,18 @@ internal object FollowersScanner {
         states.getOrPut(userUuid) { mutableStateOf(FollowersScanState()) }.value = FollowersScanState(snapshot = FollowersScanStore(context, userUuid).read())
     }
 
+    /** Self-follow is known directly after saving; no discovery scan is necessary.
+     * Uses the normal snapshot so backups and app restarts retain the entry. */
+    suspend fun recordSelfFollow(context: Context, profile: ComposeAuthorProfile, alias: String?) {
+        val snapshot = withContext(Dispatchers.IO) {
+            FollowersScanStore(context, profile.uuid).modify { current ->
+                val others = current.followers.filterNot { it.profile.uuid == profile.uuid }
+                current.copy(followers = if (alias == null) others else others + FollowerEntry(alias, profile))
+            }
+        }
+        update(profile.uuid) { it.copy(snapshot = snapshot) }
+    }
+
     /** Shared by push and notification refresh; disk work never blocks notification UI. */
     fun recordNotifications(context: Context, userUuid: String, notifications: List<com.twocents.mobile.notifications.AppNotification>) {
         if (notifications.none { it.type == "followed" || it.type == "followed_by" }) return
@@ -169,6 +181,7 @@ internal object FollowersScanner {
         val store = FollowersScanStore(context, auth.userUuid)
         store.modify { previous ->
             candidates += previous.candidates
+            candidates.remove(auth.userUuid)
             previous.copy(candidates = candidates.toList())
         }
         update(auth.userUuid) { it.copy(phase = "Checking who follows you…", completed = 0, total = candidates.size) }
@@ -196,15 +209,18 @@ internal object FollowersScanner {
             // A follow arriving during the scan must survive its final write. Older
             // followers absent from hasMe results are removed, but candidates are retained.
             val merged = followers.associateByTo(linkedMapOf()) { it.profile.uuid }
+            // Discovery excludes the account itself; keep the latest explicit self-follow.
+            latest.followers.firstOrNull { it.profile.uuid == auth.userUuid }?.let { merged[auth.userUuid] = it }
             latest.followers.filter { (latest.followEvents[it.profile.uuid] ?: 0L) > scanStartedAt }
                 .forEach { merged[it.profile.uuid] = it }
             latest.copy(candidates = (candidates + latest.candidates).toList(),
                 followers = merged.values.toList(), completedAt = scanStartedAt)
         }
-        update(auth.userUuid) { it.copy(running = false, phase = "Complete", snapshot = snapshot, completed = followers.size, total = followers.size) }
+        val foundCount = snapshot.followers.size
+        update(auth.userUuid) { it.copy(running = false, phase = "Complete", snapshot = snapshot, completed = foundCount, total = foundCount) }
         if (auth.userUuid !in visibleSheets) {
-            toastIds.remove(auth.userUuid)?.let { AppToast.success("Found ${followers.size} followers", it) }
-                ?: AppToast.success("Found ${followers.size} followers")
+            toastIds.remove(auth.userUuid)?.let { AppToast.success("Found $foundCount followers", it) }
+                ?: AppToast.success("Found $foundCount followers")
         } else toastIds.remove(auth.userUuid)?.let(AppToast::dismiss)
     }
 

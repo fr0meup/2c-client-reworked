@@ -12,7 +12,7 @@ The goal is a more polished Android experience: lightweight, fast, data-consciou
 
 ## Current status
 
-Latest Android release: **v0.1.5**. See the [release notes](https://github.com/fr0meup/2c-client-reworked/releases/tag/v0.1.5) for details.
+Latest Android release: **v0.1.6**. See the [release notes](https://github.com/fr0meup/2c-client-reworked/releases/tag/v0.1.6) for details.
 
 The Android client supports the functionality of the official twocents application with the current exceptions of creating transactions and budgets. Those features are not currently available to the developer in the EU, which means their behavior and API contracts cannot yet be tested or implemented reliably. They will be added as soon as access makes a correct implementation possible.
 
@@ -82,6 +82,10 @@ Create custom rooms and group DMs, join supported rooms, and share invite links 
 
 Mention people while writing posts, comments, and chat messages. Type **@** to choose someone you follow, search by their assigned nickname, or enter a user UUID to find someone outside your following list. Mentions render as clickable names or net worths that open the person's profile.
 
+### Mobile picks cards
+
+Picks include a probability-history graph, resolution status, compact Yes/No choices, and average-net-worth results. Swipe horizontally on the graph to inspect historical probabilities; vertical swipes scroll the feed. Average net worth and vote percentages stay hidden until you vote or the pick resolves. Graph probabilities and voter percentages are distinct measurements.
+
 ### Local activity statistics
 
 The sidebar records available daily and weekly activity such as upvotes and follower changes. The history is reconciled against current account totals where possible and can be preserved through data export and import.
@@ -92,6 +96,12 @@ The sidebar records available daily and weekly activity such as upvotes and foll
 - **Show verified accounts only:** filter supported feeds to verified accounts while leaving saved bookmarks accessible.
 - **Appear offline:** disconnect live presence, typing, notification, and chat sockets while retaining manual refresh and REST-based message sending.
 - **Wi-Fi-only automatic media:** reduce mobile-data usage for automatic media preparation while keeping manual playback available.
+
+### Self-follow and your own nickname
+
+In **Edit profile**, optionally follow yourself and choose a nickname. Self-follow is off by default unless you already follow yourself. You can change the nickname or turn self-follow off there, then select **Save changes**. Nickname changes may take time to appear throughout the app; refresh or reopen the affected page if needed.
+
+Following yourself also adds you to your saved Followers list without a scan. Turning it off removes your entry; the saved list is retained across restarts and included in data backups.
 
 ### Automatic self-upvotes
 
