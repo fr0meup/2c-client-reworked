@@ -152,6 +152,13 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
     }
 
     Dialog(onDismissRequest = ::requestClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        // Form typography should not inherit the feed's roomier body line height.
+        androidx.compose.material3.ProvideTextStyle(
+            androidx.compose.material3.LocalTextStyle.current.copy(
+                fontSize = 12.sp, lineHeight = 16.sp,
+                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+            ),
+        ) {
         val view = LocalView.current
         val imeVisible = WindowInsets.ime.getBottom(density) > 0
         val sheetFraction by animateFloatAsState(if (imeVisible) .94f else .84f, tween(180), label = "edit-sheet-height")
@@ -170,31 +177,31 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                 }
                 Row(Modifier.fillMaxWidth().then(dragModifier).padding(start = 16.dp, end = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Edit profile", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                        Text(if (dirty) "Unsaved changes" else "Make your profile yours", color = if (dirty) EditGold.copy(alpha = .75f) else Color.White.copy(alpha = .38f), fontSize = 11.sp)
+                        Text("Edit profile", color = Color.White, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(if (dirty) "Unsaved changes" else "Your public profile", color = if (dirty) EditGold.copy(alpha = .75f) else Color.White.copy(alpha = .38f), fontSize = 11.sp)
                     }
                     EditDismissControl(confirmClose, onExpand = ::requestClose, onConfirm = { if (!saving) performClose() })
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = .07f)))
                 if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), color = EditGold, strokeWidth = 2.dp) }
                 else {
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         EditSection(Icons.Outlined.PersonOutline, "About you") {
-                            EditField("Bio", bio, { bio = it.take(320); confirmClose = false }, "Tell people a little about yourself", false, 58.dp)
+                            EditField("Bio", bio, { bio = it.take(320); confirmClose = false }, "Tell people a little about yourself", false, 54.dp)
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-                                Box(Modifier.width(105.dp)) {
+                                Box(Modifier.weight(.8f)) {
                                     EditField("Age", age, {
                                         val digits = it.filter(Char::isDigit).take(3)
                                         age = digits.toIntOrNull()?.coerceAtMost(120)?.toString() ?: digits
                                         confirmClose = false
                                     }, "Age", centered = true)
                                 }
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Column(Modifier.weight(2f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                     Text("Gender", color = Color.White.copy(alpha = .42f), fontSize = 10.5.sp)
                                     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                         listOf("M" to "Male", "F" to "Female").forEach { (key, label) ->
                                             val selected = gender.equals(key, true)
-                                            Box(modifier = Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(11.dp)).background(if (selected) EditGold.copy(alpha = .12f) else Color.White.copy(alpha = .025f))
+                                            Box(modifier = Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(11.dp)).background(if (selected) EditGold.copy(alpha = .12f) else Color.White.copy(alpha = .025f))
                                                     .border(.7.dp, if (selected) EditGold.copy(alpha = .35f) else Color.White.copy(alpha = .075f), RoundedCornerShape(11.dp))
                                                     .clickable { gender = key; confirmClose = false }, contentAlignment = Alignment.Center) {
                                                 Text(label, color = if (selected) EditGold else Color.White.copy(alpha = .55f), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -210,7 +217,6 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                                 catalog = cityCatalog,
                                 onChange = { arena = it.take(100); confirmClose = false },
                             )
-                            Text("This is shown in your user meta pill.", color = Color.White.copy(alpha = .28f), fontSize = 10.sp)
                         }
                         EditSection(Icons.Outlined.PersonOutline, "Your nickname") {
                             SelfFollowEditor(followSelf, selfNickname, selfFollowAvailable, saving,
@@ -221,7 +227,7 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                     }
                     Column(Modifier.fillMaxWidth().background(EditSurface).padding(start = 14.dp, top = 9.dp, end = 14.dp, bottom = saveBottomPadding)) {
                         Box(
-                            Modifier.fillMaxWidth().height(41.dp).clip(RoundedCornerShape(14.dp)).background(EditGold.copy(alpha = if (!dirty || saving) .34f else .92f))
+                            Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(11.dp)).background(EditGold.copy(alpha = if (!dirty || saving) .34f else .92f))
                                 .clickable(enabled = dirty && !saving) {
                                     scope.launch {
                                         saving = true; error = null
@@ -257,7 +263,7 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                                 }, contentAlignment = Alignment.Center,
                         ) {
                             if (saving) CircularProgressIndicator(Modifier.size(18.dp), color = Color(0xFF17130A), strokeWidth = 2.dp)
-                            else Text(if (dirty) "Save changes" else "No changes", color = Color(0xFF17130A), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                            else Text("Save changes", color = Color(0xFF17130A), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -266,23 +272,30 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
     }
 }
 
+}
+
 @Composable private fun EditSection(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, content: @Composable ColumnScope.() -> Unit) = Column(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp)).background(Color.White.copy(alpha = .026f)).border(.7.dp, Color.White.copy(alpha = .075f), RoundedCornerShape(17.dp)).padding(13.dp),
-    verticalArrangement = Arrangement.spacedBy(11.dp),
+    Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(9.dp),
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Icon(icon, null, tint = EditGold.copy(alpha = .76f), modifier = Modifier.size(17.dp)); Text(title, color = Color.White.copy(alpha = .8f), fontSize = 12.5.sp, fontWeight = FontWeight.Bold) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Icon(icon, null, tint = EditGold.copy(alpha = .76f), modifier = Modifier.size(15.dp))
+        Text(title, color = Color.White.copy(alpha = .75f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Box(Modifier.weight(1f).height(.7.dp).background(Color.White.copy(alpha = .08f)))
+    }
     content()
 }
 
-@Composable internal fun EditField(label: String, value: String, onChange: (String) -> Unit, placeholder: String = "", singleLine: Boolean = true, minHeight: Dp = 38.dp, centered: Boolean = false) = Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+@Composable internal fun EditField(label: String, value: String, onChange: (String) -> Unit, placeholder: String = "", singleLine: Boolean = true, minHeight: Dp = 36.dp, centered: Boolean = false) = Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
     Text(label, color = Color.White.copy(alpha = .42f), fontSize = 10.5.sp)
-    BasicTextField(value, onChange, singleLine = singleLine, textStyle = TextStyle(color = Color.White.copy(alpha = .9f), fontSize = 13.sp, lineHeight = 18.sp, textAlign = if (centered) TextAlign.Center else TextAlign.Start), cursorBrush = SolidColor(EditGold),
+    BasicTextField(value, onChange, singleLine = singleLine, textStyle = TextStyle(color = Color.White.copy(alpha = .9f), fontSize = 12.5.sp, lineHeight = 17.sp, platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false), textAlign = if (centered) TextAlign.Center else TextAlign.Start), cursorBrush = SolidColor(EditGold),
         modifier = Modifier.fillMaxWidth()
             .then(if (singleLine) Modifier.height(minHeight) else Modifier.heightIn(min = minHeight, max = 104.dp))
             .clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .16f))
             .border(.7.dp, Color.White.copy(alpha = .085f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 11.dp, vertical = if (singleLine) 7.dp else 11.dp),
-        decorationBox = { inner -> Box(Modifier.fillMaxSize(), contentAlignment = if (centered) Alignment.Center else if (singleLine) Alignment.CenterStart else Alignment.TopStart) { if (value.isBlank() && placeholder.isNotBlank()) Text(placeholder, color = Color.White.copy(alpha = .2f), fontSize = 12.5.sp, textAlign = if (centered) TextAlign.Center else TextAlign.Start); inner() } })
+            .padding(horizontal = 10.dp, vertical = if (singleLine) 7.dp else 10.dp),
+        // Only single-line inputs fill their fixed height. Bio grows with content.
+        decorationBox = { inner -> Box(if (singleLine) Modifier.fillMaxSize() else Modifier.fillMaxWidth(), contentAlignment = if (centered) Alignment.Center else if (singleLine) Alignment.CenterStart else Alignment.TopStart) { if (value.isBlank() && placeholder.isNotBlank()) Text(placeholder, color = Color.White.copy(alpha = .3f), fontSize = 12.5.sp, lineHeight = 17.sp, textAlign = if (centered) TextAlign.Center else TextAlign.Start); inner() } })
 }
 
 @Composable
@@ -368,14 +381,14 @@ private fun SelectionDropdown(
         Text(label, color = Color.White.copy(alpha = .42f), fontSize = 10.5.sp)
         BoxWithConstraints {
             Row(
-                Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(12.dp))
+                Modifier.fillMaxWidth().height(36.dp).clip(RoundedCornerShape(12.dp))
                     .background(Color.Black.copy(alpha = .16f))
                     .border(.7.dp, Color.White.copy(alpha = if (enabled) .085f else .045f), RoundedCornerShape(12.dp))
                     .clickable(enabled = enabled && options.isNotEmpty()) { expanded = true }
                     .padding(horizontal = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(value, color = Color.White.copy(alpha = if (enabled) .78f else .25f), fontSize = 12.5.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                Text(value, color = Color.White.copy(alpha = if (enabled) .78f else .25f), fontSize = 12.5.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Icon(Icons.Rounded.KeyboardArrowDown, null, tint = Color.White.copy(alpha = if (enabled) .38f else .16f), modifier = Modifier.size(17.dp))
             }
             AppDropdown(

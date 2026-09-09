@@ -305,6 +305,26 @@ private fun FeedMediaPrewarmer(posts: List<FeedPost>, listState: LazyListState) 
     val targetWidthPx = with(density) { 380.dp.roundToPx() }
     val targetHeightPx = with(density) { 380.dp.roundToPx() }
 
+    // Independently warm only the visible/next few rows, never the entire feed.
+    // Post keys avoid offsets introduced by advanced-search header items.
+    LaunchedEffect(posts, listState) {
+        val indices = posts.withIndex().associate { it.value.uuid to it.index }
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { indices[it.key] } }
+            .map { visible ->
+                val first = visible.minOrNull() ?: 0
+                first..minOf(posts.lastIndex, (visible.maxOrNull() ?: 0) + 3)
+            }
+            .distinctUntilChanged()
+            .collectLatest { range ->
+                if (!InteractionPreferences.automaticMediaAllowed(context)) return@collectLatest
+                range.flatMap { index ->
+                    listOfNotNull(posts[index].meta.videoUrl, posts[index].meta.quotePost?.meta?.videoUrl)
+                }.distinct().take(3).forEach { url ->
+                    VideoPreviewRepository.prepare(context.applicationContext, url)
+                }
+            }
+    }
+
     LaunchedEffect(posts, listState, imageLoader, targetWidthPx) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
             .map { indexes ->
@@ -318,7 +338,7 @@ private fun FeedMediaPrewarmer(posts: List<FeedPost>, listState: LazyListState) 
             .collectLatest { range ->
                 if (!InteractionPreferences.automaticMediaAllowed(context)) return@collectLatest
                 // Image prefetch stays responsive even if an MP4 metadata probe is slow.
-                // Visible video composables already request their cached preview.
+                // Video prefetch runs separately so it never blocks images.
                 val urls = range
                     .flatMap { index -> posts[index].warmableMediaUrls() }
                     .distinct()

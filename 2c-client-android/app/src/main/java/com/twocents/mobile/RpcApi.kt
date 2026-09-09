@@ -35,6 +35,7 @@ class RpcApi(
         params: JSONObject,
         auth: AuthState,
     ): Any? = withContext(Dispatchers.IO) {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         val requestJson = JSONObject()
             .put("jsonrpc", "2.0")
             .put("id", auth.userUuid)
@@ -56,10 +57,11 @@ class RpcApi(
 
         response.use { httpResponse ->
             if (httpResponse.code == 429) {
-                throw ApiException(ApiRateLimitNotice.report())
+                throw ApiException(ApiRateLimitNotice.report(method))
             }
             val body = httpResponse.body?.string().orEmpty()
             if (!httpResponse.isSuccessful) {
+                if (ApiRateLimitNotice.matches(body)) throw ApiException(ApiRateLimitNotice.report(method))
                 throw ApiException("HTTP ${httpResponse.code}: ${body.take(500)}")
             }
 
@@ -77,11 +79,12 @@ class RpcApi(
                     ?: root.optString("error").trim().takeIf(String::isNotBlank)
                     ?: "The request was rejected"
                 if (rpcError?.optInt("code") == 429 || ApiRateLimitNotice.matches(message)) {
-                    throw ApiException(ApiRateLimitNotice.report())
+                    throw ApiException(ApiRateLimitNotice.report(method))
                 }
                 throw ApiException(message)
             }
 
+            ApiRateLimitNotice.succeeded(method, startedAt)
             root.opt("result")
         }
     }

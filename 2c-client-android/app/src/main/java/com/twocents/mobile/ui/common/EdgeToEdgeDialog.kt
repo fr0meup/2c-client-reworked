@@ -18,6 +18,8 @@ internal fun EdgeToEdgeDialogWindow(
     decorFitsSystemWindows: Boolean? = false,
     darkNavigationIcons: Boolean = false,
 ) {
+    // Dialogs are separate Android windows, above the app's normal overlay host.
+    RateLimitBanner()
     val view = LocalView.current
     DisposableEffect(view, navigationBarColor, decorFitsSystemWindows, darkNavigationIcons) {
         val window = (view.parent as? DialogWindowProvider)?.window

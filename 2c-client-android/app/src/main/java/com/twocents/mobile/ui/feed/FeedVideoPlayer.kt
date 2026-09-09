@@ -137,7 +137,8 @@ internal fun FeedVideoPlayer(
     val autoplayEnabled = InteractionPreferences.autoPlayVideos(context)
     val wifiOnlyMedia = InteractionPreferences.wifiOnlyMedia(context)
     val handoff = remember(safeUri) { VideoPlaybackHandoff.state(safeUri) }
-    var preview by remember(safeUri) { mutableStateOf<CachedVideoPreview?>(null) }
+    var preview by remember(safeUri) { mutableStateOf(VideoPreviewRepository.peek(safeUri)) }
+    var previewLoading by remember(safeUri) { mutableStateOf(false) }
     var activated by remember(safeUri) {
         // Opening detail or revisiting a paused video must not start a fresh stream.
         // Its saved position is restored when playback is explicitly requested.
@@ -146,7 +147,12 @@ internal fun FeedVideoPlayer(
     var autoPlay by remember(safeUri) { mutableStateOf(false) }
     LaunchedEffect(safeUri, wifiOnlyMedia) {
         if (InteractionPreferences.automaticMediaAllowed(context)) {
-            preview = VideoPreviewRepository.prepare(context.applicationContext, safeUri)
+            previewLoading = preview == null
+            try {
+                preview = VideoPreviewRepository.prepare(context.applicationContext, safeUri)
+            } finally {
+                previewLoading = false
+            }
         }
     }
 
@@ -185,10 +191,16 @@ internal fun FeedVideoPlayer(
             ) {
                 preview?.file?.let { file ->
                     AsyncImage(file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                } ?: CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp).align(Alignment.Center),
+                }
+                if (preview == null && previewLoading) CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp).align(Alignment.BottomStart).padding(2.dp),
                     color = Color.White.copy(alpha = .42f),
                     strokeWidth = 2.dp,
+                )
+                else if (preview == null) Text(
+                    "Tap to play • Preview unavailable",
+                    color = Color.White.copy(alpha = .5f), fontSize = 11.sp, lineHeight = 14.sp,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
                 )
                 val interaction = remember { MutableInteractionSource() }
                 Box(

@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
@@ -36,17 +37,20 @@ internal data class CachedVideoPreview(val file: File, val ratio: Float?)
 /** Stores only a bounded set of first frames and dimensions; video streams are never persisted. */
 internal object VideoPreviewRepository {
     private val memory = ConcurrentHashMap<String, CachedVideoPreview>()
-    private val locks = ConcurrentHashMap<String, Mutex>()
+    // Stable striped locks also deduplicate probes while another caller is waiting.
+    private val locks = Array(32) { Mutex() }
+    private val probes = kotlinx.coroutines.sync.Semaphore(2)
     // A failed probe must not spend its transfer budget again on every row remount.
     private val retryAfter = ConcurrentHashMap<String, Long>()
 
+    fun peek(uri: String): CachedVideoPreview? = memory[uri]?.takeIf { it.file.isFile }
+
     suspend fun prepare(context: Context, uri: String): CachedVideoPreview? = withContext(Dispatchers.IO) {
-        memory[uri]?.let { return@withContext it }
+        peek(uri)?.let { return@withContext it }
         if ((retryAfter[uri] ?: 0L) > System.currentTimeMillis()) return@withContext null
-        val lock = locks.getOrPut(uri) { Mutex() }
-        try {
-            lock.withLock {
-                memory[uri]?.let { return@withLock it }
+        val lock = locks[(uri.hashCode() and Int.MAX_VALUE) % locks.size]
+        lock.withLock {
+                peek(uri)?.let { return@withLock it }
                 if ((retryAfter[uri] ?: 0L) > System.currentTimeMillis()) return@withLock null
                 val directory = File(context.cacheDir, "video-previews").apply { mkdirs() }
                 val key = MessageDigest.getInstance("SHA-256").digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -59,6 +63,7 @@ internal object VideoPreviewRepository {
                     return@withLock cached
                 }
                 runCatching {
+                    probes.withPermit {
                     val retriever = MediaMetadataRetriever()
                     try {
                         val parsed = Uri.parse(uri)
@@ -83,20 +88,21 @@ internal object VideoPreviewRepository {
                     } finally {
                         retriever.release()
                     }
-                }.getOrNull().also { result ->
+                    }
+                }.getOrElse { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    null
+                }.also { result ->
                     if (result == null) retryAfter[uri] = System.currentTimeMillis() + 15 * 60 * 1000L
                 }?.also { preview ->
                     memory[uri] = preview
-                    directory.listFiles()?.sortedByDescending(File::lastModified)?.drop(96)?.forEach { stale ->
+                    directory.listFiles()?.filter { it.extension == "jpg" }?.sortedByDescending(File::lastModified)?.drop(96)?.forEach { stale ->
                         if (stale.extension == "jpg") {
                             stale.delete()
                             File(directory, "${stale.nameWithoutExtension}.ratio").delete()
                         }
                     }
                 }
-            }
-        } finally {
-            locks.remove(uri, lock)
         }
     }
 }

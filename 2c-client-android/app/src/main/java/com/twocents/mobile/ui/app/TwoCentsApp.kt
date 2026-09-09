@@ -31,6 +31,7 @@ fun TwoCentsApp(
     var auth by remember { mutableStateOf<AuthState?>(null) }
     var checkingStoredAuth by remember { mutableStateOf(true) }
     var startupProgress by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(auth?.userUuid) { com.twocents.mobile.ApiRateLimitNotice.reset() }
 
     LaunchedEffect(authStore) {
         startupProgress = 0.78f
@@ -56,5 +57,6 @@ fun TwoCentsApp(
             )
         }
         AppToastHost(Modifier.align(Alignment.TopCenter))
+        com.twocents.mobile.ui.common.RateLimitBanner()
     }
 }

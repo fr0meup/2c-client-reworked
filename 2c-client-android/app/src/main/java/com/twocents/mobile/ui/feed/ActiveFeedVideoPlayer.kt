@@ -156,7 +156,7 @@ internal fun ActiveFeedVideoPlayer(
     var videoRatio by remember(safeUri) { mutableFloatStateOf(cachedMediaRatio(safeUri) ?: (16f / 9f)) }
     var inViewport by remember(safeUri) { mutableStateOf(true) }
     // Never give Coil a remote video: it can download the entire file to decode a frame.
-    var thumbnailModel by remember(safeUri) { mutableStateOf<Any?>(null) }
+    var thumbnailModel by remember(safeUri) { mutableStateOf<Any?>(VideoPreviewRepository.peek(safeUri)?.file) }
     LaunchedEffect(safeUri) {
         VideoPreviewRepository.prepare(context.applicationContext, safeUri)?.let { preview ->
             thumbnailModel = preview.file
@@ -175,7 +175,7 @@ internal fun ActiveFeedVideoPlayer(
     DisposableEffect(player, lifecycleOwner) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                playbackError = "Couldn't load this video. Check your connection or try again."
+                playbackError = "Couldn't load this video. Check your connection or try again. It may no longer be available."
                 isBuffering = false
                 controlsVisible = true
             }

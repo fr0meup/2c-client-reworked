@@ -237,6 +237,11 @@ private fun FeedImageGallery(
     onClick: (Int, ImageOriginRect) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val ratios = remember(images) {
+        androidx.compose.runtime.mutableStateMapOf<String, Float>().apply {
+            synchronized(MediaRatios) { images.forEach { uri -> MediaRatios[uri]?.let { put(uri, it) } } }
+        }
+    }
     val visibleIndices by remember(listState, images) {
         derivedStateOf {
             val layout = listState.layoutInfo
@@ -265,6 +270,15 @@ private fun FeedImageGallery(
             .fillMaxWidth()
             .padding(top = if (compact) 8.dp else 10.dp),
     ) {
+        // Only enlarge an underfilled gallery once actual ratios are known.
+        // One common factor preserves all relative image sizes; gaps stay unchanged.
+        val gap = 8.dp
+        val baseHeight = if (compact) 160.dp else 280.dp
+        val imageWidth = images.sumOf { (baseHeight.value * (ratios[it] ?: 1f).coerceIn(.2f, 5f)).toDouble() }.toFloat()
+        val gapsWidth = gap.value * (images.size - 1)
+        val scale = if (!preserveFullImage && images.all { it in ratios } && imageWidth + gapsWidth < maxWidth.value) {
+            (maxWidth.value + gap.value - gapsWidth) / imageWidth
+        } else 1f
         LazyRow(
             state = listState,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -276,6 +290,8 @@ private fun FeedImageGallery(
                     compact = compact,
                     preserveFullImage = preserveFullImage,
                     fullWidth = maxWidth,
+                    scale = scale,
+                    onRatio = { next -> if (ratios[uri] != next) ratios[uri] = next },
                     hidden = hiddenIndex == index,
                     onClick = { rect -> onClick(index, rect) },
                 )
@@ -323,14 +339,16 @@ private fun GalleryImage(
     compact: Boolean,
     preserveFullImage: Boolean,
     fullWidth: Dp,
+    scale: Float,
+    onRatio: (Float) -> Unit,
     hidden: Boolean,
     onClick: (ImageOriginRect) -> Unit,
 ) {
     val context = LocalContext.current
     var ratio by remember(uri) { mutableFloatStateOf(synchronized(MediaRatios) { MediaRatios[uri] } ?: 1f) }
     var bounds by remember(uri) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    val width = if (preserveFullImage) fullWidth else (if (compact) 160.dp else 280.dp) * ratio.coerceIn(0.2f, 5f)
-    val height = if (preserveFullImage) fullWidth / ratio.coerceAtLeast(.2f) else if (compact) 160.dp else 280.dp
+    val width = if (preserveFullImage) fullWidth else (if (compact) 160.dp else 280.dp) * ratio.coerceIn(0.2f, 5f) * scale
+    val height = if (preserveFullImage) fullWidth / ratio.coerceAtLeast(.2f) else (if (compact) 160.dp else 280.dp) * scale
     val shape = RoundedCornerShape(if (compact) 10.dp else 12.dp)
     Box(
         modifier = Modifier
@@ -352,6 +370,7 @@ private fun GalleryImage(
                     val next = image.width.toFloat() / image.height.toFloat()
                     synchronized(MediaRatios) { MediaRatios[uri] = next }
                     ratio = next
+                    onRatio(next)
                 }
             },
             modifier = Modifier.fillMaxSize(),

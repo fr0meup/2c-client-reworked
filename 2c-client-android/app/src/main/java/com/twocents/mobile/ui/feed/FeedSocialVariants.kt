@@ -127,9 +127,7 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null) {
         if (!videoUrl.isNullOrBlank()) {
             FeedVideoPlayer(videoUrl, compact = true)
         } else if (quote.meta.images.isNotEmpty()) {
-            // Scale each carousel image to the quote's width, preserving its ratio
-            // and full content. Leave single-image quotes on their existing path.
-            FeedPostMedia(quote.meta.images, compact = true, preserveFullImage = quote.meta.images.size > 1)
+            FeedPostMedia(quote.meta.images, compact = true)
         }
     }
 }

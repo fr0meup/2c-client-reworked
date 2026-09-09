@@ -141,7 +141,7 @@ fun PullToRefreshContainer(
             try {
                 val succeeded = withTimeout(REFRESH_TIMEOUT_MS) { updatedOnRefresh.value() }
                 if (runVersion != state.cancelVersion) return@launch
-                resultMessage = if (succeeded) "Refreshed" else "Refresh failed"
+                resultMessage = if (succeeded) "Refreshed" else if (com.twocents.mobile.ApiRateLimitNotice.active.value) "Rate limited — try again later" else "Refresh failed"
                 if (!succeeded) holdResultMs = 1_350L
             } catch (_: TimeoutCancellationException) {
                 resultMessage = "Refresh timed out"
@@ -149,7 +149,7 @@ fun PullToRefreshContainer(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
-                resultMessage = "Refresh failed"
+                resultMessage = if (com.twocents.mobile.ApiRateLimitNotice.active.value) "Rate limited — try again later" else "Refresh failed"
                 holdResultMs = 1_350L
             } finally {
                 if (runVersion == state.cancelVersion) {
