@@ -76,7 +76,6 @@ internal fun PostOptionsButton(
     var confirmUnfollow by remember(post.uuid) { mutableStateOf(false) }
     var confirmBlock by remember(post.uuid) { mutableStateOf(false) }
     var confirmMute by remember(post.uuid) { mutableStateOf(false) }
-    var quotesOpen by remember(post.uuid) { mutableStateOf(false) }
     val ownPost = post.authorUuid == authUuid
     val following = controller.isFollowing(post.authorUuid)
     val muted = controller.isMuted(post.authorUuid)
@@ -139,7 +138,7 @@ internal fun PostOptionsButton(
                     }
                 }
             }
-            PostMenuItem(PostMenuIcons.Quote, "View quotes") { expanded = false; quotesOpen = true }
+            PostMenuItem(PostMenuIcons.Quote, "View quotes") { expanded = false; QuotesNavigationBus.open(post, controller) }
             if (!ownPost) {
                 PostMenuDivider()
                 PostMenuItem(
@@ -211,82 +210,6 @@ internal fun PostOptionsButton(
                 }
             }
         }
-    }
-    if (quotesOpen) PostQuotesDialog(post, authUuid, controller, onQuotePost, onOpenMessages) { quotesOpen = false }
-}
-
-@Composable
-private fun PostQuotesDialog(
-    sourcePost: FeedPost,
-    authUuid: String,
-    controller: FeedController,
-    onQuotePost: ((FeedPost) -> Unit)?,
-    onOpenMessages: (() -> Unit)?,
-    onDismiss: () -> Unit,
-) {
-    var loading by remember { mutableStateOf(true) }
-    var quotes by remember { mutableStateOf(emptyList<FeedPost>()) }
-    val scope = rememberCoroutineScope()
-    val dismissDistance = with(LocalDensity.current) { 1200.dp.toPx() }
-    val motion = remember { Animatable(0f) }
-    var closing by remember { mutableStateOf(false) }
-    fun close() {
-        if (closing) return
-        closing = true
-        scope.launch {
-            motion.animateTo(0f, tween(210))
-            onDismiss()
-        }
-    }
-    LaunchedEffect(Unit) { motion.animateTo(1f, tween(210)) }
-    LaunchedEffect(sourcePost.uuid) { quotes = controller.loadQuotes(sourcePost.uuid); loading = false }
-    Dialog(onDismissRequest = ::close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-      val view = LocalView.current
-      DisposableEffect(view) {
-          val window = (view.parent as? DialogWindowProvider)?.window
-          val oldNavigationColor = window?.navigationBarColor
-          window?.let { WindowCompat.setDecorFitsSystemWindows(it, false) }
-          window?.setWindowAnimations(0)
-          window?.navigationBarColor = android.graphics.Color.TRANSPARENT
-          window?.isNavigationBarContrastEnforced = false
-          window?.let { WindowInsetsControllerCompat(it, view).isAppearanceLightNavigationBars = false }
-          onDispose {
-              if (oldNavigationColor != null) window?.navigationBarColor = oldNavigationColor
-          }
-      }
-      Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .72f * motion.value)).clickable(onClick = ::close)) {
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.86f)
-                .graphicsLayer { translationY = dismissDistance * (1f - motion.value) }
-                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(Color(0xFF0F0E0A)).border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .clickable(onClick = {}).navigationBarsPadding(),
-        ) {
-            Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp).width(36.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = .2f)))
-            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(38.dp).clip(RoundedCornerShape(13.dp)).background(MenuGold.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
-                    Icon(PostMenuIcons.Quote, null, tint = MenuGold, modifier = Modifier.size(18.dp))
-                }
-                Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                    Text("Quotes", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text(if (loading) "Loading quotes…" else "${quotes.size} ${if (quotes.size == 1) "quote post" else "quote posts"}", color = Color.White.copy(alpha = 0.45f), fontSize = 11.5.sp)
-                }
-                Icon(Icons.Outlined.Close, "Close", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(30.dp).clip(CircleShape).clickable(onClick = ::close).padding(7.dp))
-            }
-            HorizontalDivider(color = Color.White.copy(alpha = 0.07f))
-            when {
-                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), color = MenuGold, strokeWidth = 2.dp) }
-                quotes.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No quotes yet", color = Color.White.copy(alpha = 0.45f), fontSize = 13.sp) }
-                else -> LazyColumn { items(quotes, key = { it.uuid }) { quote ->
-                    FeedPostCard(
-                        post = quote, authUuid = authUuid, currentVote = 0, alias = null, pollVote = null, likertVote = null,
-                        pickVote = null, pollResults = null, likertResults = null, picksResult = null, controller = controller,
-                        onQuotePost = onQuotePost, onOpenMessages = onOpenMessages,
-                    )
-                } }
-            }
-        }
-      }
     }
 }
 

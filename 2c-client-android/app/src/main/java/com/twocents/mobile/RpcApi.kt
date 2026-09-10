@@ -34,6 +34,16 @@ class RpcApi(
         method: String,
         params: JSONObject,
         auth: AuthState,
+    ): Any? {
+        val policy = kotlin.coroutines.coroutineContext[RpcRequestPolicy]
+        return if (policy == null) callDirect(method, params, auth)
+        else policy.execute { callDirect(method, params, auth) }
+    }
+
+    private suspend fun callDirect(
+        method: String,
+        params: JSONObject,
+        auth: AuthState,
     ): Any? = withContext(Dispatchers.IO) {
         val startedAt = android.os.SystemClock.elapsedRealtime()
         val requestJson = JSONObject()
@@ -57,11 +67,11 @@ class RpcApi(
 
         response.use { httpResponse ->
             if (httpResponse.code == 429) {
-                throw ApiException(ApiRateLimitNotice.report(method))
+                throw ApiException(ApiRateLimitNotice.report(method), retryAfterMillis = retryAfterMillis(httpResponse.header("Retry-After")))
             }
             val body = httpResponse.body?.string().orEmpty()
             if (!httpResponse.isSuccessful) {
-                if (ApiRateLimitNotice.matches(body)) throw ApiException(ApiRateLimitNotice.report(method))
+                if (ApiRateLimitNotice.matches(body)) throw ApiException(ApiRateLimitNotice.report(method), retryAfterMillis = retryAfterMillis(httpResponse.header("Retry-After")))
                 throw ApiException("HTTP ${httpResponse.code}: ${body.take(500)}")
             }
 
@@ -79,7 +89,7 @@ class RpcApi(
                     ?: root.optString("error").trim().takeIf(String::isNotBlank)
                     ?: "The request was rejected"
                 if (rpcError?.optInt("code") == 429 || ApiRateLimitNotice.matches(message)) {
-                    throw ApiException(ApiRateLimitNotice.report(method))
+                    throw ApiException(ApiRateLimitNotice.report(method), retryAfterMillis = retryAfterMillis(httpResponse.header("Retry-After")))
                 }
                 throw ApiException(message)
             }
@@ -200,4 +210,4 @@ class RpcApi(
     }
 }
 
-class ApiException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class ApiException(message: String, cause: Throwable? = null, val retryAfterMillis: Long? = null) : Exception(message, cause)

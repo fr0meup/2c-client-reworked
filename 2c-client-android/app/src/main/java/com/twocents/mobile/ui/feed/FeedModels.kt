@@ -67,9 +67,11 @@ data class FeedPost(
     val meta: FeedPostMeta,
     val postType: Int,
 ) {
+    // Quote posts retain type 3 even when they also attach a poll.
+    val hasPoll: Boolean get() = meta.poll.isNotEmpty()
     val recycleType: String
         get() = when {
-            postType == 2 -> "poll"
+            hasPoll -> "poll"
             postType == 5 -> "likert"
             postType == 7 -> "picks"
             postType == 8 -> "transaction"

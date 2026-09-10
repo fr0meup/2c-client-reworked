@@ -57,6 +57,11 @@ fun MainShell(
     val lifecycleOwner = LocalLifecycleOwner.current
     val profileCache = remember(context) { ComposeAuthorProfileCache(context) }
     val profileRefreshScope = rememberCoroutineScope()
+    LaunchedEffect(auth.userUuid) {
+        com.twocents.mobile.ui.feed.QuotesNavigationBus.requests.collect { request ->
+            overlayStack = overlayStack + ShellOverlayEntry.Quotes(nextOverlayId++, request.post, request.controller)
+        }
+    }
     fun pushProfile(userUuid: String, seed: ComposeAuthorProfile? = null) {
         // Overlay entries retain their own identity so nested profile/post chains
         // unwind one screen at a time instead of reconstructing a destination.

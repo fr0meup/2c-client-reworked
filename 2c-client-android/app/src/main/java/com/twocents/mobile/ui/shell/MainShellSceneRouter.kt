@@ -94,12 +94,12 @@ internal fun MainShellSceneRouter(
                     val startedAt = System.nanoTime()
                     val succeeded = advancedSearchFilters?.let {
                         feedController.loadAdvanced(it, force = true)
+                        if (feedController.state.error == null) feedListState.requestScrollToItem(0)
                         // Refresh the first results page, not thousands of indexed
                         // posts. Remaining cards revalidate when they enter view.
                         feedController.state.error == null && feedController.refreshResults(feedController.state.posts.take(20))
-                    } ?: feedController.refresh(activeTopic, searchQuery)
+                    } ?: feedController.refresh(activeTopic, searchQuery) { feedListState.requestScrollToItem(0) }
                     notificationController.load(force = true)
-                    if (succeeded) feedListState.requestScrollToItem(0)
                     refreshOwnProfile()
                     val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
                     delay((360L - elapsedMs).coerceAtLeast(0L))

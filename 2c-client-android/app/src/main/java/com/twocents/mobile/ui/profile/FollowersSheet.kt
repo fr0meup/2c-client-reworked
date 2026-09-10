@@ -153,7 +153,7 @@ internal fun FollowersSheet(
                             Text("  (BETA)", color = Color.White.copy(alpha = .25f), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            if (state.running) state.phase else if (state.snapshot.completedAt > 0 || state.snapshot.followers.isNotEmpty()) "${state.snapshot.followers.size} known followers" else "Scan available users",
+                            if (state.running) state.displayPhase else if (state.snapshot.completedAt > 0 || state.snapshot.followers.isNotEmpty()) "${state.snapshot.followers.size} known followers" else "Scan available users",
                             color = Color.White.copy(alpha = .45f), fontSize = 11.5.sp,
                         )
                     }
@@ -183,7 +183,7 @@ internal fun FollowersSheet(
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                                     CircularProgressIndicator(Modifier.size(17.dp), color = FollowersGold, strokeWidth = 1.8.dp)
                                     Text(
-                                        state.phase + if (state.total > 0) " ${state.completed} of ${state.total}" else "",
+                                        state.displayPhase + if (state.total > 0) " ${state.completed} of ${state.total}" else "",
                                         color = Color.White.copy(alpha = .65f), fontSize = 11.5.sp,
                                     )
                                 }

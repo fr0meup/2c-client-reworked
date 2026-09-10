@@ -68,7 +68,7 @@ class FeedController(
         AdvancedSearchIndex.initialize(context)
     }
 
-    suspend fun load(topic: String, query: String, force: Boolean = false): Boolean {
+    suspend fun load(topic: String, query: String, force: Boolean = false, onPostsReady: () -> Unit = {}): Boolean {
         val key = cacheKey(topic, query)
         val keyChanged = key != activeKey
         if (!force && !keyChanged && state.posts.isNotEmpty()) return false
@@ -96,6 +96,9 @@ class FeedController(
         runCatching { requestPage(topic, query, cursor = null) }
             .onSuccess { page ->
                 if (generation != requestGeneration || key != activeKey) return@onSuccess
+                // Reset the viewport in the same frame as the replacement page,
+                // before slower result and notification refreshes complete.
+                onPostsReady()
                 state = page.withoutMuted().toState().copy(
                     aliases = aliases,
                     pollResults = pollResultsCache.toMap(),
@@ -112,8 +115,8 @@ class FeedController(
         return keyChanged
     }
 
-    suspend fun refresh(topic: String, query: String): Boolean {
-        load(topic, query, force = true)
+    suspend fun refresh(topic: String, query: String, onPostsReady: () -> Unit = {}): Boolean {
+        load(topic, query, force = true, onPostsReady = onPostsReady)
         return if (state.error == null) refreshResults(state.posts) else false
     }
 
@@ -127,17 +130,17 @@ class FeedController(
         state = state.copy(resultsRevision = resultRequests.invalidate())
         var succeeded = true
         posts.distinctBy { it.uuid }.filter { post ->
-            when (post.postType) {
-                2 -> post.authorUuid == auth.userUuid || post.uuid in pollVotes || post.uuid in pollResultsCache
-                5 -> post.authorUuid == auth.userUuid || post.uuid in likertVotes || post.uuid in likertResultsCache
-                7 -> true
+            when {
+                post.hasPoll -> post.authorUuid == auth.userUuid || post.uuid in pollVotes || post.uuid in pollResultsCache
+                post.postType == 5 -> post.authorUuid == auth.userUuid || post.uuid in likertVotes || post.uuid in likertResultsCache
+                post.postType == 7 -> true
                 else -> false
             }
         }.chunked(3).forEach { batch ->
             val results = batch.map { post -> async {
-                when (post.postType) {
-                    2 -> ensurePollResults(post.uuid)
-                    5 -> ensureLikertResults(post.uuid)
+                when {
+                    post.hasPoll -> ensurePollResults(post.uuid)
+                    post.postType == 5 -> ensureLikertResults(post.uuid)
                     else -> ensurePicksResults(post.uuid)
                 }
             } }.map { it.await() }
@@ -259,9 +262,41 @@ class FeedController(
     }
 
     suspend fun loadQuotes(postUuid: String): List<FeedPost> = runCatching {
+        ensureAliases()
         val root = api.call("/v2/posts/quotes", JSONObject().put("post_uuid", postUuid), auth) as? JSONObject
+        root?.let { mergeQuoteInteractions(parseFeedPage(it)) }
         root?.optJSONArray("posts").objects().mapNotNull(::parseFeedPost).orEmpty()
     }.getOrDefault(emptyList())
+
+    /** Quotes endpoints may omit interaction arrays. Hydrate only visible rows
+     * using the detail response, without replacing the originating feed page. */
+    internal suspend fun loadQuoteInteractions(postUuid: String): Boolean {
+        val previousVote = state.postVotes[postUuid]
+        try {
+            val root = api.call("/v1/posts/get", JSONObject().put("post_uuid", postUuid), auth) as? JSONObject ?: return false
+            if (root.optJSONObject("post") == null) return false
+            // Detail arrays describe this post and need not repeat content_uuid.
+            val page = parseFeedPage(root).copy(
+                postVotes = if (state.postVotes[postUuid] == previousVote) mapOf(postUuid to
+                    (root.optJSONArray("votes").objects().firstOrNull()?.int("vote_type") ?: 0)) else emptyMap(),
+                pollVotes = root.optJSONArray("polls").objects().firstOrNull()?.let { mapOf(postUuid to it.int("option")) }.orEmpty(),
+                likertVotes = root.optJSONArray("likertVotes").objects().firstOrNull()?.let { mapOf(postUuid to it.int("option")) }.orEmpty(),
+                pickVotes = root.optJSONArray("pickVotes").objects().firstOrNull()?.string("vote")?.let { mapOf(postUuid to it) }.orEmpty(),
+            )
+            mergeQuoteInteractions(page)
+            return true
+        } catch (error: CancellationException) { throw error }
+        catch (_: Exception) { return false /* Keep known state; retry on a later mount. */ }
+    }
+
+    private fun mergeQuoteInteractions(page: FeedPage) {
+        state = state.copy(
+            postVotes = state.postVotes + page.postVotes.filterKeys { "post:$it" !in pendingMutations },
+            pollVotes = state.pollVotes + page.pollVotes,
+            likertVotes = state.likertVotes + page.likertVotes,
+            pickVotes = state.pickVotes + page.pickVotes,
+        )
+    }
 
     suspend fun blockAuthor(authorUuid: String): Boolean {
         val succeeded = runCatching {

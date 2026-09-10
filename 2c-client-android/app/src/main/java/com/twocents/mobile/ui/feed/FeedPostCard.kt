@@ -129,7 +129,7 @@ internal fun FeedPostCard(
     val isOwn = authUuid == post.authorUuid
 
     LaunchedEffect(post.uuid, pollVote, likertVote, isOwn, controller.state.resultsRevision) {
-        if (post.postType == 2 && (pollVote != null || isOwn)) controller.ensurePollResults(post.uuid)
+        if (post.hasPoll && (pollVote != null || isOwn)) controller.ensurePollResults(post.uuid)
         if (post.postType == 5 && (likertVote != null || isOwn)) controller.ensureLikertResults(post.uuid)
         if (post.postType == 7) controller.ensurePicksResults(post.uuid)
     }
@@ -215,8 +215,8 @@ internal fun FeedPostCard(
             }
             tweetUrl?.let { TweetEmbedCard(it) }
 
-            when (post.postType) {
-                2 -> if (post.meta.poll.isNotEmpty()) FeedPollCard(
+            when {
+                post.hasPoll -> FeedPollCard(
                     post = post,
                     userVote = pollVote,
                     results = pollResults,
@@ -224,7 +224,7 @@ internal fun FeedPostCard(
                     onVote = { option -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.votePoll(post.uuid, option) } },
                     ensureResults = { scope.launch { controller.ensurePollResults(post.uuid) } },
                 )
-                5 -> FeedLikertCard(
+                post.postType == 5 -> FeedLikertCard(
                     post = post,
                     userVote = likertVote,
                     results = likertResults,
@@ -232,7 +232,7 @@ internal fun FeedPostCard(
                     onVote = { option -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.voteLikert(post.uuid, option) } },
                     ensureResults = { scope.launch { controller.ensureLikertResults(post.uuid) } },
                 )
-                7 -> FeedPicksCard(
+                post.postType == 7 -> FeedPicksCard(
                     post = post,
                     userVote = pickVote,
                     result = picksResult,

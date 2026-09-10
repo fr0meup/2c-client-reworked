@@ -73,6 +73,17 @@ internal fun RetainedOverlayHost(
         stack.forEachIndexed { index, entry ->
             key(entry.id) {
                 val top = index == stack.lastIndex
+                if (entry is ShellOverlayEntry.Quotes) {
+                    // Keep the list composed beneath destinations, but remove its
+                    // dialog window so it cannot cover or intercept the new page.
+                    com.twocents.mobile.ui.feed.PostQuotesDialog(
+                        sourcePost = entry.post, authUuid = auth.userUuid,
+                        controller = entry.controller, onQuotePost = onQuotePost,
+                        onOpenMessages = onOpenMessages, visible = top,
+                        onOpenPost = { onPushPost(OpenedPost(it, entry.controller)) },
+                        onDismiss = onPop,
+                    )
+                } else {
                 val offset = remember(entry.id) { Animatable(screenWidthPx) }
                 LaunchedEffect(entry.id) { offset.animateTo(0f, tween(180, easing = ShellOutCubic)) }
                 LaunchedEffect(exitingId) {
@@ -90,6 +101,7 @@ internal fun RetainedOverlayHost(
                         ),
                 ) {
                     when (entry) {
+                        is ShellOverlayEntry.Quotes -> Unit // Hosted as a retained sheet above.
                         is ShellOverlayEntry.Profile -> {
                             var loadedProfile by remember(entry.id) { mutableStateOf(entry.seed) }
                             var scrollRequest by remember(entry.id) { mutableStateOf(0) }
@@ -171,6 +183,7 @@ internal fun RetainedOverlayHost(
                             onLogout = onLogout,
                         )
                     }
+                }
                 }
             }
         }

@@ -34,7 +34,10 @@ internal data class FollowersScanState(
     val total: Int = 0,
     val snapshot: FollowersScanSnapshot = FollowersScanSnapshot(),
     val error: String? = null,
-)
+    val pauseReason: String? = null,
+) {
+    val displayPhase: String get() = pauseReason ?: phase
+}
 
 /**
  * Process-lived follower discovery. Collection and hasMe verification are kept
@@ -115,10 +118,14 @@ internal object FollowersScanner {
         if (state(context, auth.userUuid).running) return
         update(auth.userUuid) { it.copy(running = true, phase = "Finding users…", completed = 0, total = 0, error = null) }
         scope.launch {
-            runCatching { scan(context.applicationContext, api, auth) }
+            runCatching {
+                withContext(ScanRequestPacer(onPause = { reason ->
+                    update(auth.userUuid) { it.copy(pauseReason = reason) }
+                })) { scan(context.applicationContext, api, auth) }
+            }
                 .onFailure { error ->
                     if (error is CancellationException) throw error
-                    update(auth.userUuid) { it.copy(running = false, error = friendlyError(error, "Follower scan failed")) }
+                    update(auth.userUuid) { it.copy(running = false, pauseReason = null, error = friendlyError(error, "Follower scan failed")) }
                     if (auth.userUuid !in visibleSheets) {
                         toastIds.remove(auth.userUuid)?.let { AppToast.error("Follower scan failed", it) }
                             ?: AppToast.error("Follower scan failed")
@@ -175,6 +182,7 @@ internal object FollowersScanner {
         withContext(Dispatchers.Main.immediate) {
             search.loadAdvanced(AdvancedSearchFilters(dateFrom = "2024-11-01"), force = true)
         }
+        search.state.error?.let { error(it) } // Never publish a partial discovery as a successful full scan.
         withContext(Dispatchers.IO) { AdvancedSearchIndex.snapshot() }.forEach { candidates += it.authorUuid }
         candidates.remove(auth.userUuid)
 
@@ -190,7 +198,9 @@ internal object FollowersScanner {
             val found = coroutineScope {
                 ids.map { uuid -> async {
                     val root = retryRpc { api.call("/v1/aliases/hasMe", JSONObject().put("authorUUID", uuid), auth) } as? JSONObject
-                    uuid.takeIf { root?.optBoolean("hasAlias") == true }
+                    // A malformed response is not evidence of an unfollow.
+                    if (root?.opt("hasAlias") !is Boolean) error("Invalid follower lookup response. Your saved followers have been kept.")
+                    uuid.takeIf { root.optBoolean("hasAlias") }
                 } }.awaitAll().filterNotNull()
             }
             followerUuids += found
@@ -235,18 +245,8 @@ internal object FollowersScanner {
         )
     }
 
-    private suspend fun retryRpc(block: suspend () -> Any?): Any? {
-        var delayMs = 450L
-        repeat(4) { attempt ->
-            try { return block() } catch (error: Throwable) {
-                if (error is CancellationException) throw error
-                val limited = error.message.orEmpty().contains("429") || error.message.orEmpty().contains("rate", true)
-                if (!limited || attempt == 3) throw error
-                delay(delayMs); delayMs *= 2
-            }
-        }
-        return null
-    }
+    // Retries and pauses are coordinated by the inherited request policy.
+    private suspend fun retryRpc(block: suspend () -> Any?): Any? = block()
 
     private fun update(uuid: String, transform: (FollowersScanState) -> FollowersScanState) {
         val holder = states.getOrPut(uuid) { mutableStateOf(FollowersScanState()) }
@@ -263,7 +263,7 @@ internal object FollowersScanner {
 
     private fun publishToast(uuid: String, state: FollowersScanState) {
         val detail = if (state.total > 0) " ${state.completed}/${state.total}" else ""
-        toastIds[uuid] = AppToast.progress(state.phase + detail, toastIds[uuid])
+        toastIds[uuid] = AppToast.progress(state.displayPhase + detail, toastIds[uuid])
     }
 }
 
