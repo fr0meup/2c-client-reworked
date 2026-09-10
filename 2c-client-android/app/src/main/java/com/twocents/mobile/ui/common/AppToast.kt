@@ -90,6 +90,11 @@ internal object AppToast {
 /** Process-lived work for operations that must survive navigating away from their screen. */
 internal object AppBackgroundTasks {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Submitted mutations outlive their composable. Use Main for controller/UI
+    // state; API and file helpers dispatch the expensive work to IO themselves.
+    // Animations, focus and scroll jobs must stay in the original screen scope.
+    val mutations = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate +
+        kotlinx.coroutines.CoroutineExceptionHandler { _, error -> AppToast.error(friendlyError(error)) })
     fun launch(block: suspend CoroutineScope.() -> Unit) = scope.launch(block = block)
 }
 

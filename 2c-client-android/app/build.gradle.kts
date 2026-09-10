@@ -38,8 +38,8 @@ android {
         applicationId = "com.twocents.mobile.kotlin"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.1.7"
+        versionCode = 9
+        versionName = "0.1.8"
     }
 
     signingConfigs {
@@ -109,6 +109,7 @@ kotlin {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.activity:activity-compose:1.12.1")

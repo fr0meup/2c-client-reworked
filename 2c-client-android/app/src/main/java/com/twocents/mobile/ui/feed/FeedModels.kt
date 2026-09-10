@@ -106,6 +106,7 @@ data class FeedUiState(
     val pollResults: Map<String, Map<Int, FeedOptionResult>> = emptyMap(),
     val likertResults: Map<String, Map<Int, FeedOptionResult>> = emptyMap(),
     val picksResults: Map<String, FeedPicksResult> = emptyMap(),
+    val resultsRevision: Long = 0L,
     val isInitialLoading: Boolean = true,
     val isLoadingMore: Boolean = false,
     val hasMore: Boolean = false,

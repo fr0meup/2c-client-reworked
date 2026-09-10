@@ -128,9 +128,10 @@ internal fun FeedPostCard(
     val shownText = if (!expanded && textWithoutTweet.length > 400) textWithoutTweet.take(400).trimEnd() + "…" else textWithoutTweet
     val isOwn = authUuid == post.authorUuid
 
-    LaunchedEffect(post.uuid, pollVote, likertVote, isOwn) {
+    LaunchedEffect(post.uuid, pollVote, likertVote, isOwn, controller.state.resultsRevision) {
         if (post.postType == 2 && (pollVote != null || isOwn)) controller.ensurePollResults(post.uuid)
         if (post.postType == 5 && (likertVote != null || isOwn)) controller.ensureLikertResults(post.uuid)
+        if (post.postType == 7) controller.ensurePicksResults(post.uuid)
     }
 
     Column(
@@ -159,6 +160,7 @@ internal fun FeedPostCard(
                 onOpenMessages = onOpenMessages,
                 onDeleted = onDeleted,
                 authorNavigationEnabled = authorNavigationEnabled,
+                expandableTimestamp = detailMode,
             )
 
             if (post.title.isNotBlank()) {
@@ -219,7 +221,7 @@ internal fun FeedPostCard(
                     userVote = pollVote,
                     results = pollResults,
                     isOwner = isOwn,
-                    onVote = { option -> scope.launch { controller.votePoll(post.uuid, option) } },
+                    onVote = { option -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.votePoll(post.uuid, option) } },
                     ensureResults = { scope.launch { controller.ensurePollResults(post.uuid) } },
                 )
                 5 -> FeedLikertCard(
@@ -227,14 +229,14 @@ internal fun FeedPostCard(
                     userVote = likertVote,
                     results = likertResults,
                     isOwner = isOwn,
-                    onVote = { option -> scope.launch { controller.voteLikert(post.uuid, option) } },
+                    onVote = { option -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.voteLikert(post.uuid, option) } },
                     ensureResults = { scope.launch { controller.ensureLikertResults(post.uuid) } },
                 )
                 7 -> FeedPicksCard(
                     post = post,
                     userVote = pickVote,
                     result = picksResult,
-                    onVote = { vote -> scope.launch { controller.votePick(post.uuid, vote) } },
+                    onVote = { vote -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.votePick(post.uuid, vote) } },
                     ensureResults = { scope.launch { controller.ensurePicksResults(post.uuid) } },
                 )
             }
@@ -264,7 +266,7 @@ internal fun FeedPostCard(
                 alias = alias,
                 onVote = { direction ->
                     onVoteOverride?.invoke(direction)
-                        ?: scope.launch { controller.togglePostVote(post.uuid, direction) }
+                        ?: com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.togglePostVote(post.uuid, direction) }
                 },
             )
         }

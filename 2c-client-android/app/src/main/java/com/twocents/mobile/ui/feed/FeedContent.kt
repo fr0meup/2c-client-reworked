@@ -92,7 +92,7 @@ fun FeedContent(
     // bookmarks intentionally preserve the user's explicitly saved content.
     val visiblePosts = remember(state.posts, verifiedOnly, controller.source) {
         if (!verifiedOnly || controller.source == FeedSource.Bookmarks) state.posts
-        else state.posts.filter { it.author.subscriptionType > 0 }
+        else state.posts.filter(VerifiedContentFilterStore::allows)
     }
 
     LaunchedEffect(controller, topic, searchQuery, advancedFilters) {

@@ -143,13 +143,9 @@ internal class RoomChatController(
                 api.putBytes(upload.getString("presignedURL"), bytes, contentType)
                 imageUrl = upload.getString("publicURL")
             }
-            val payload = JSONObject().put("action", "sendMessage").put("roomUuid", room.uuid).put("text", text.trim())
-            reply?.uuid?.let { payload.put("replyToMessageUuid", it) }
-            imageUrl?.let { payload.put("imageUrl", it) }
-            // Media messages use REST: unlike the socket action, that endpoint
-            // durably accepts imageUrl (including a selected GIF URL).
-            val deliveredToSocket = imageUrl == null && socket?.send(payload.toString()) == true
-            if (!deliveredToSocket) {
+            // A socket enqueue isn't delivery confirmation and its connection is
+            // closed on navigation. REST lets every submitted send finish and
+            // report the server-confirmed outcome even after leaving the room.
                 val result = api.call(
                     "/v1/rooms/sendMessageRest",
                     JSONObject().put("roomUuid", room.uuid).put("text", text.trim())
@@ -162,7 +158,6 @@ internal class RoomChatController(
                 imageUrl?.let { media ->
                     RoomMediaPreviewStore.put(appContext, room.uuid, if (media.substringBefore('?').endsWith(".gif", true)) "GIF" else "Image", confirmed.createdAt)
                 }
-            }
             state = state.copy(sending = false)
             true
         }.getOrElse { error ->

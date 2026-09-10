@@ -143,7 +143,10 @@ internal suspend fun FeedController.loadAdvanced(filters: AdvancedSearchFilters,
         val current = advancedDisplayFilters
         val visible = current.sort(advancedCorpus.filter(current::matches).filterNot { mutedUsers.isMuted(it.authorUuid) })
         FeedUiState(posts = visible, postVotes = votes, pollVotes = pollVotes, likertVotes = likertVotes, pickVotes = pickVotes, aliases = aliases, isInitialLoading = false, hasMore = false, advancedSearching = false, advancedScanned = scanned, advancedMatches = visible.size)
-    }.onSuccess { result -> if (generation == requestGeneration && activeKey == key) state = result }
+    }.onSuccess { result -> if (generation == requestGeneration && activeKey == key) {
+        state = result
+        restoreResultSnapshots()
+    } }
         .onFailure { error ->
             if (error is CancellationException) throw error
             if (generation == requestGeneration) state = state.copy(isInitialLoading = false, advancedSearching = false, error = error.message ?: "Advanced search failed")

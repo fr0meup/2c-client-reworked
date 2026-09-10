@@ -131,6 +131,7 @@ fun ComposePostModal(
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf(TextFieldValue()) }
     var styleRanges by remember { mutableStateOf(emptyList<ComposeStyleRange>()) }
+    var composeSession by remember { mutableIntStateOf(0) }
     var topic by remember { mutableStateOf("Lounge") }
     var pinnedTopic by remember { mutableStateOf("Lounge") }
     var activeOption by remember { mutableStateOf<ComposePostOption?>(null) }
@@ -202,6 +203,7 @@ fun ComposePostModal(
     }
 
     LaunchedEffect(visible) {
+        composeSession++
         if (visible) {
             modalAnimationJob?.cancel()
             mounted = true
@@ -321,7 +323,9 @@ fun ComposePostModal(
     fun submitCurrentPost() {
         if (isSubmitting) return
         isSubmitting = true
-        scope.launch {
+        val submittedSession = composeSession
+        val submittedDraftId = loadedDraftId
+        com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
             val success = runCatching {
                 latestOnPost.value(
                     ComposePostDraft(
@@ -332,15 +336,15 @@ fun ComposePostModal(
                     ),
                 )
             }.getOrDefault(false)
-            isSubmitting = false
+            if (composeSession == submittedSession) isSubmitting = false
             if (success) {
                 AppToast.success("Post published")
-                loadedDraftId?.let { draftId ->
+                submittedDraftId?.let { draftId ->
                     storedDrafts = draftStore.delete(draftId)
                     draftsCount = storedDrafts.size
-                    loadedDraftId = null
+                    if (loadedDraftId == draftId) loadedDraftId = null
                 }
-                closeModal()
+                scope.launch { if (composeSession == submittedSession) closeModal() }
             } else AppToast.error("Couldn't publish post")
         }
     }

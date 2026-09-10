@@ -284,11 +284,14 @@ internal fun CommentComposer(
                     .clip(CircleShape)
                     .clickable(enabled = canSend && !state.submitting) {
                         AppHaptics.confirm(view)
-                        scope.launch {
-                            if (controller.createComment(text, replyTarget?.uuid, imageUri, context)) {
-                                text = ""
-                                imageUri = null
-                                onCancelReply()
+                        val submittedText = text
+                        val submittedImage = imageUri
+                        val submittedReply = replyTarget?.uuid
+                        com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
+                            if (controller.createComment(submittedText, submittedReply, submittedImage, context.applicationContext)) {
+                                if (text == submittedText) text = ""
+                                if (imageUri == submittedImage) imageUri = null
+                                scope.launch { if (replyTarget?.uuid == submittedReply) onCancelReply() }
                             }
                         }
                     },

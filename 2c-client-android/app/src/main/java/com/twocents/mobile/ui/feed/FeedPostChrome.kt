@@ -89,7 +89,10 @@ internal fun FeedPostHeader(
     onOpenMessages: (() -> Unit)?,
     onDeleted: (() -> Unit)?,
     authorNavigationEnabled: Boolean = true,
+    expandableTimestamp: Boolean = false,
 ) {
+    var timestampExpanded by androidx.compose.runtime.saveable.rememberSaveable(post.uuid) { mutableStateOf(false) }
+    val fullTimestamp = remember(post.createdAt) { formatExactJoined(post.createdAt) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(
             modifier = Modifier.weight(1f),
@@ -97,7 +100,16 @@ internal fun FeedPostHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             FeedNetworthPill(post, compact = true, navigationEnabled = authorNavigationEnabled)
-            HeaderMetaText(feedTimeAgo(post.createdAt))
+            if (expandableTimestamp) Text(
+                if (timestampExpanded) fullTimestamp else feedTimeAgo(post.createdAt),
+                color = Color.White.copy(alpha = .4f), fontSize = 12.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = (if (timestampExpanded) Modifier.weight(1f) else Modifier)
+                    .clickable { timestampExpanded = !timestampExpanded }.padding(vertical = 5.dp),
+            ) else HeaderMetaText(feedTimeAgo(post.createdAt))
+            // Expanded time uses the metadata slot rather than pushing the pill
+            // or menu off-screen. Collapsing restores the original header exactly.
+            if (!expandableTimestamp || !timestampExpanded) {
             HeaderDot()
             FeedPlatformIcon(post.meta.platform)
             if (post.topic.isNotBlank()) {
@@ -116,6 +128,7 @@ internal fun FeedPostHeader(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.5.dp)) {
                 FeedEyeIcon(Modifier.size(12.dp))
                 Text(post.viewCount.toString(), color = Color.White.copy(alpha = 0.4f), fontSize = 11.5.sp, fontWeight = FontWeight.Medium)
+            }
             }
         }
         if (showMenu) {
@@ -446,4 +459,3 @@ internal fun feedTimeAgo(raw: String): String {
 
 
 private const val LOCATION_ICON_URL = "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Flocation-icon.432s1sddmkeug.png&w=48&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"
-

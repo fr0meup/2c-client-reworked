@@ -186,7 +186,20 @@ fun UserProfileContent(
     PullToRefreshContainer(
         state = refreshState,
         enabled = !graphGestureActive && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
-        onRefresh = { val ok = controller.load(force = true); onNotificationsFallback(); ok },
+        onRefresh = {
+            val ok = controller.load(force = true)
+            val resultsOk = if (ok) feedController.refreshResults(
+                when (tab) {
+                    ProfileTab.Posts -> controller.state.posts
+                    ProfileTab.Votes -> controller.state.votedPosts
+                    ProfileTab.Comments -> emptyList()
+                },
+                pollVotes = controller.state.polls.keys,
+                likertVotes = controller.state.likerts.keys,
+            ) else false
+            onNotificationsFallback()
+            ok && resultsOk
+        },
         modifier = modifier.fillMaxSize(),
         indicatorTopOffset = 4.dp,
     ) {
@@ -197,7 +210,7 @@ fun UserProfileContent(
                     isOwn = targetUuid == auth.userUuid,
                     isFollowing = targetUuid in feedController.state.aliases,
                     alias = feedController.state.aliases[targetUuid],
-                    onToggleFollow = { aliasValue -> scope.launch { feedController.toggleFollowing(targetUuid, aliasValue) } },
+                    onToggleFollow = { aliasValue -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { feedController.toggleFollowing(targetUuid, aliasValue) } },
                     onGraphGestureActive = { graphGestureActive = it },
                     onOpenFollowers = if (targetUuid == auth.userUuid) ({ followersOpen = true }) else null,
                     onOpenFollowing = if (targetUuid == auth.userUuid) ({ followingOpen = true }) else null,
@@ -213,7 +226,7 @@ fun UserProfileContent(
                         currentVote = state.commentVotes[comment.uuid] ?: 0,
                         alias = feedController.state.aliases[comment.authorUuid] ?: comment.author.alias,
                         onOpenPost = onOpenCommentPost,
-                        onVote = { direction -> scope.launch { controller.toggleCommentVote(comment, direction) } },
+                        onVote = { direction -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.toggleCommentVote(comment, direction) } },
                     )
                 }
             } else if (posts.isEmpty()) {
@@ -236,7 +249,7 @@ fun UserProfileContent(
                         onOpenPost = onOpenPost,
                         onQuotePost = onQuotePost,
                         onOpenMessages = onOpenMessages,
-                        onVoteOverride = { direction -> scope.launch { controller.togglePostVote(post, direction) } },
+                        onVoteOverride = { direction -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.togglePostVote(post, direction) } },
                     )
                 }
             }

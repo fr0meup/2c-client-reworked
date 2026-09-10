@@ -311,16 +311,18 @@ fun RoomChatScreen(
                 val keepNewestVisible = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset <= with(density) { 12.dp.roundToPx() }
                 controller.updateTyping(false)
                 input = ""; reply = null; selectedImage = null; selectedGif = null
-                scope.launch {
-                    val send = async { controller.send(sentText, sentReply, sentImage, sentGif, context) }
+                com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
+                    val send = async { controller.send(sentText, sentReply, sentImage, sentGif, context.applicationContext) }
                     if (keepNewestVisible) {
-                        withFrameNanos { }
-                        listState.requestScrollToItem(0)
+                        scope.launch {
+                            withFrameNanos { }
+                            listState.requestScrollToItem(0)
+                        }
                     }
                     if (!send.await()) {
                         input = sentText; reply = sentReply; selectedImage = sentImage; selectedGif = sentGif
                         com.twocents.mobile.ui.common.AppToast.error("Message failed to send. Check your connection and try again.")
-                    }
+                    } else com.twocents.mobile.ui.common.AppToast.success("Message sent")
                 }
             },
         )

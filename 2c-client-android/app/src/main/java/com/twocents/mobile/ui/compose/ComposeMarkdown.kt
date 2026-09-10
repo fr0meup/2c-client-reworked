@@ -253,7 +253,7 @@ fun TextFieldValue.applyComposeSmartNewline(
         return ComposeSmartTextEdit(this, bulletsActive, quoteActive)
     }
 
-    val lineStart = previousText.lastIndexOf('\n', (insertion - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+    val lineStart = if (insertion == 0) 0 else previousText.lastIndexOf('\n', insertion - 1).let { if (it < 0) 0 else it + 1 }
     val previousLine = previousText.substring(lineStart, insertion)
     if (previousLine.trim() == "•") {
         val nextText = previousText.substring(0, lineStart) + "\n" + previousText.substring(insertion)

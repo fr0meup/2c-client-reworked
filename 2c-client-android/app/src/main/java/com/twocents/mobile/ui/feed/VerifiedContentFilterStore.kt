@@ -9,6 +9,12 @@ import androidx.compose.runtime.mutableStateMapOf
  * preferences keeps the choice stable across process restarts.
  */
 internal object VerifiedContentFilterStore {
+    // News/service content and picks are deliberately exempt, regardless of
+    // the account's subscription flag. Quotes are still filtered only outside.
+    fun allows(post: FeedPost): Boolean = post.author.subscriptionType > 0 ||
+        post.postType == 7 || post.authorUuid.equals("news", ignoreCase = true) ||
+        post.author.role.equals("news", ignoreCase = true)
+
     private val observed = mutableStateMapOf<String, Boolean>()
 
     private fun preferences(context: Context, userUuid: String) =

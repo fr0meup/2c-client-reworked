@@ -109,6 +109,22 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
     var confirmLogout by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf<String?>(null) }
     val storageOperation by LocalDataOperation.active.collectAsState()
+    // An import may complete in a previous Settings instance after navigation.
+    // Re-read persisted values when the shared operation finishes, not just here
+    // in its original completion callback.
+    LaunchedEffect(storageOperation) {
+        if (storageOperation == null) {
+            searchIndexCount = AdvancedSearchMemoryIndex.count()
+            offline = OfflineModeStore.isEnabled(context, auth.userUuid)
+            verifiedOnly = VerifiedContentFilterStore.isEnabled(context, auth.userUuid)
+            autoLikeOwnContent = InteractionPreferences.autoLikeOwnContent(context)
+            autoPlayVideos = InteractionPreferences.autoPlayVideos(context)
+            wifiOnlyMedia = InteractionPreferences.wifiOnlyMedia(context)
+            haptics = AppHaptics.isEnabled(context)
+            pushCategories = NotificationPreferences.enabledSet(context, push = true)
+            inAppCategories = NotificationPreferences.enabledSet(context, push = false)
+        }
+    }
     val view = androidx.compose.ui.platform.LocalView.current
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -158,7 +174,7 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
             AppToast.error("${LocalDataOperation.active.value ?: "A storage operation"} is already in progress")
             return@rememberLauncherForActivityResult
         }
-        scope.launch {
+        AppBackgroundTasks.mutations.launch {
             val toastId = AppToast.progress("Importing local data…")
             try {
                 runCatching {
@@ -370,7 +386,7 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                         Column {
                             SettingsDivider(22.dp)
                             SettingRow(Icons.Outlined.DeleteSweep, if (confirmClear == "media") "Are you sure?" else "Clear media cache", if (confirmClear == "media") "Tap again to remove downloaded media" else "Remove downloaded thumbnails and images", enabled = storageOperation == null) {
-                                if (confirmClear != "media") { AppHaptics.open(view); confirmClear = "media" } else scope.launch {
+                                if (confirmClear != "media") { AppHaptics.open(view); confirmClear = "media" } else AppBackgroundTasks.mutations.launch {
                                     confirmClear = null
                                     if (!LocalDataOperation.tryStart("Clearing media cache")) return@launch
                                     val toastId = AppToast.progress("Clearing media cache…")
@@ -382,7 +398,7 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                                 }
                             }
                             SettingRow(Icons.Outlined.ManageSearch, if (confirmClear == "index") "Are you sure?" else "Clear search index", if (confirmClear == "index") "Tap again to remove $searchIndexCount indexed posts" else "$searchIndexCount locally indexed posts", enabled = storageOperation == null) {
-                                if (confirmClear != "index") { AppHaptics.open(view); confirmClear = "index" } else scope.launch {
+                                if (confirmClear != "index") { AppHaptics.open(view); confirmClear = "index" } else AppBackgroundTasks.mutations.launch {
                                     confirmClear = null
                                     if (!LocalDataOperation.tryStart("Clearing search index")) return@launch
                                     val toastId = AppToast.progress("Clearing search index…")
@@ -409,7 +425,7 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                                 }
                             }
                             SettingRow(Icons.Outlined.DeleteForever, if (confirmClear == "local") "Are you sure?" else "Clear local data", if (confirmClear == "local") "Tap again to permanently clear local app data" else "Export a backup first—saved GIFs, drafts and other local-only data can be lost", enabled = storageOperation == null) {
-                                if (confirmClear != "local") { AppHaptics.open(view); confirmClear = "local" } else scope.launch {
+                                if (confirmClear != "local") { AppHaptics.open(view); confirmClear = "local" } else AppBackgroundTasks.mutations.launch {
                                     confirmClear = null
                                     if (!LocalDataOperation.tryStart("Clearing local data")) return@launch
                                     val toastId = AppToast.progress("Clearing local data…")

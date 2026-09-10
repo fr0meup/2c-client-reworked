@@ -229,7 +229,7 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                         Box(
                             Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(11.dp)).background(EditGold.copy(alpha = if (!dirty || saving) .34f else .92f))
                                 .clickable(enabled = dirty && !saving) {
-                                    scope.launch {
+                                    com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
                                         saving = true; error = null
                                         if (followSelf && selfNickname.isBlank()) { error = "Enter a nickname to follow yourself"; saving = false; return@launch }
                                         val parsedAge = age.toIntOrNull()?.takeIf { it in 13..120 }
@@ -255,9 +255,15 @@ internal fun EditProfileSheet(auth: AuthState, api: RpcApi, seed: ComposeAuthorP
                                         }
                                             .onSuccess {
                                                 original = listOf(bio, age, gender, arena)
-                                                onSaved((seed ?: ComposeAuthorProfile(auth.userUuid)).copy(age = parsedAge, gender = gender.ifBlank { null }, arena = arena.trim().ifBlank { null }))
-                                                performClose()
-                                            }.onFailure { error = it.message ?: "Couldn't update profile" }
+                                                com.twocents.mobile.ui.common.AppToast.success("Profile updated")
+                                                scope.launch {
+                                                    onSaved((seed ?: ComposeAuthorProfile(auth.userUuid)).copy(age = parsedAge, gender = gender.ifBlank { null }, arena = arena.trim().ifBlank { null }))
+                                                    performClose()
+                                                }
+                                            }.onFailure {
+                                                error = it.message ?: "Couldn't update profile"
+                                                com.twocents.mobile.ui.common.AppToast.error(com.twocents.mobile.ui.common.friendlyError(it))
+                                            }
                                         saving = false
                                     }
                                 }, contentAlignment = Alignment.Center,

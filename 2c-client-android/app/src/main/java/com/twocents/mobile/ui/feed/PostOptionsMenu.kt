@@ -131,7 +131,7 @@ internal fun PostOptionsButton(
             onQuotePost?.let { quote -> PostMenuItem(PostMenuIcons.Quote, "Quote post") { expanded = false; quote(post) } }
             PostMenuItem(PostMenuIcons.Bookmark, if (bookmarked) "Remove bookmark" else "Bookmark") {
                 expanded = false
-                scope.launch {
+                com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
                     when (controller.toggleBookmark(post.uuid)) {
                         true -> feedback("Post bookmarked")
                         false -> feedback("Bookmark removed")
@@ -154,7 +154,7 @@ internal fun PostOptionsButton(
                         AppHaptics.confirm(view)
                         expanded = false
                         confirmUnfollow = false
-                        scope.launch { feedback(if (controller.toggleFollowing(post.authorUuid)) "Following updated" else "Follow failed") }
+                        com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { feedback(if (controller.toggleFollowing(post.authorUuid)) "Following updated" else "Follow failed") }
                     } else {
                         AppHaptics.open(view)
                         expanded = false
@@ -196,7 +196,7 @@ internal fun PostOptionsButton(
                         AppHaptics.confirm(view)
                         expanded = false
                         confirmBlock = false
-                        scope.launch { feedback(if (controller.blockAuthor(post.authorUuid)) "User blocked" else "Block failed") }
+                        com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { feedback(if (controller.blockAuthor(post.authorUuid)) "User blocked" else "Block failed") }
                     }
                 }
             } else {
@@ -206,7 +206,7 @@ internal fun PostOptionsButton(
                         AppHaptics.confirm(view)
                         expanded = false
                         confirmDelete = false
-                        scope.launch { if (controller.deletePost(post.uuid)) { feedback("Post deleted"); onDeleted?.invoke() } else feedback("Delete failed") }
+                        com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { if (controller.deletePost(post.uuid)) { feedback("Post deleted"); scope.launch { onDeleted?.invoke() } } else feedback("Delete failed") }
                     }
                 }
             }

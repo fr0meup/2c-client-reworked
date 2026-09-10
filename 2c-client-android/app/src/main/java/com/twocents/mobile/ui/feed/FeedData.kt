@@ -49,7 +49,7 @@ class FeedController(
     private val pollResultsCache = mutableMapOf<String, Map<Int, FeedOptionResult>>()
     private val likertResultsCache = mutableMapOf<String, Map<Int, FeedOptionResult>>()
     private val picksResultsCache = mutableMapOf<String, FeedPicksResult>()
-    private val pendingResults = mutableSetOf<String>()
+    private val resultRequests = FeedResultRequests()
     internal val pendingMutations = mutableSetOf<String>()
     private var aliasesLoaded = false
     internal var aliases: Map<String, String> = emptyMap()
@@ -114,7 +114,45 @@ class FeedController(
 
     suspend fun refresh(topic: String, query: String): Boolean {
         load(topic, query, force = true)
-        return state.error == null
+        return if (state.error == null) refreshResults(state.posts) else false
+    }
+
+    /** Refresh a page's interactive results with bounded concurrency. Other cards
+     * revalidate lazily via resultsRevision when they next enter composition. */
+    internal suspend fun refreshResults(
+        posts: List<FeedPost>,
+        pollVotes: Set<String> = state.pollVotes.keys,
+        likertVotes: Set<String> = state.likertVotes.keys,
+    ): Boolean = kotlinx.coroutines.coroutineScope {
+        state = state.copy(resultsRevision = resultRequests.invalidate())
+        var succeeded = true
+        posts.distinctBy { it.uuid }.filter { post ->
+            when (post.postType) {
+                2 -> post.authorUuid == auth.userUuid || post.uuid in pollVotes || post.uuid in pollResultsCache
+                5 -> post.authorUuid == auth.userUuid || post.uuid in likertVotes || post.uuid in likertResultsCache
+                7 -> true
+                else -> false
+            }
+        }.chunked(3).forEach { batch ->
+            val results = batch.map { post -> async {
+                when (post.postType) {
+                    2 -> ensurePollResults(post.uuid)
+                    5 -> ensureLikertResults(post.uuid)
+                    else -> ensurePicksResults(post.uuid)
+                }
+            } }.map { it.await() }
+            if (results.any { !it }) succeeded = false
+        }
+        if (!succeeded) com.twocents.mobile.ui.common.AppToast.error(
+            if (com.twocents.mobile.ApiRateLimitNotice.active.value) "Results refresh was rate limited. Try again later."
+            else "Couldn't refresh all voting results. Try refreshing again.",
+        )
+        succeeded
+    }
+
+    internal fun restoreResultSnapshots() {
+        state = state.copy(pollResults = pollResultsCache.toMap(),
+            likertResults = likertResultsCache.toMap(), picksResults = picksResultsCache.toMap())
     }
 
     /**
@@ -300,40 +338,35 @@ class FeedController(
         if (succeeded) ensurePicksResults(postUuid, force = true)
     }
 
-    suspend fun ensurePollResults(postUuid: String, force: Boolean = false) {
+    suspend fun ensurePollResults(postUuid: String, force: Boolean = false): Boolean {
         val key = "poll-result:$postUuid"
-        if ((!force && pollResultsCache.containsKey(postUuid)) || !pendingResults.add(key)) return
-        runCatching {
+        return resultRequests.load(key, force, fetch = {
             val result = api.call("/v1/polls/get", JSONObject().put("post_uuid", postUuid), auth) as? JSONObject
-            parseOptionResults(result?.optJSONObject("results"), averageKeys = listOf("average_balance"))
-        }.getOrNull()?.let { result ->
+            parseOptionResults(result?.optJSONObject("results") ?: error("Missing poll results"), averageKeys = listOf("average_balance"))
+        }) { result ->
             pollResultsCache[postUuid] = result
             state = state.copy(pollResults = state.pollResults + (postUuid to result))
         }
-        pendingResults.remove(key)
     }
 
-    suspend fun ensureLikertResults(postUuid: String, force: Boolean = false) {
+    suspend fun ensureLikertResults(postUuid: String, force: Boolean = false): Boolean {
         val key = "likert-result:$postUuid"
-        if ((!force && likertResultsCache.containsKey(postUuid)) || !pendingResults.add(key)) return
-        runCatching {
+        return resultRequests.load(key, force, fetch = {
             val result = api.call(
                 "/v1/likert/get",
                 JSONObject().put("postUuid", postUuid).put("post_uuid", postUuid),
                 auth,
             ) as? JSONObject
-            parseOptionResults(result?.optJSONObject("results"), averageKeys = listOf("averageBalance", "average_balance"))
-        }.getOrNull()?.let { result ->
+            parseOptionResults(result?.optJSONObject("results") ?: error("Missing Likert results"), averageKeys = listOf("averageBalance", "average_balance"))
+        }) { result ->
             likertResultsCache[postUuid] = result
             state = state.copy(likertResults = state.likertResults + (postUuid to result))
         }
-        pendingResults.remove(key)
     }
 
-    suspend fun ensurePicksResults(postUuid: String, force: Boolean = false) {
+    suspend fun ensurePicksResults(postUuid: String, force: Boolean = false): Boolean {
         val key = "picks-result:$postUuid"
-        if ((!force && picksResultsCache.containsKey(postUuid)) || !pendingResults.add(key)) return
-        runCatching {
+        return resultRequests.load(key, force, fetch = {
             // Same endpoint/schema as the web client; never cache an empty success.
             val root = api.call("/v1/picks/results", JSONObject().put("post_uuid", postUuid), auth) as? JSONObject
                 ?: error("Invalid pick results")
@@ -347,11 +380,10 @@ class FeedController(
                 yesAverageBalance = results?.optJSONObject("yes")?.number("average_balance")?.toDouble()?.takeIf(Double::isFinite),
                 noAverageBalance = results?.optJSONObject("no")?.number("average_balance")?.toDouble()?.takeIf(Double::isFinite),
             )
-        }.getOrNull()?.let { result ->
+        }) { result ->
             picksResultsCache[postUuid] = result
             state = state.copy(picksResults = state.picksResults + (postUuid to result))
         }
-        pendingResults.remove(key)
     }
 
     internal suspend fun requestPage(topic: String, query: String, cursor: String?): FeedPage {

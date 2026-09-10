@@ -40,7 +40,9 @@ internal fun mutateComposeBody(
         nextBold = composeSelectionHasMark(next.selection, nextRanges, ComposeMark.Bold)
         nextItalic = composeSelectionHasMark(next.selection, nextRanges, ComposeMark.Italic)
         val cursor = next.selection.min.coerceIn(0, next.text.length)
-        val lineStart = next.text.lastIndexOf('\n', (cursor - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        // At offset zero, the previous-newline search must be empty. Searching
+        // index zero includes a leading newline and would put start after end.
+        val lineStart = if (cursor == 0) 0 else next.text.lastIndexOf('\n', cursor - 1).let { if (it < 0) 0 else it + 1 }
         val lineEnd = next.text.indexOf('\n', cursor).let { if (it < 0) next.text.length else it }
         val currentLine = next.text.substring(lineStart, lineEnd)
         nextBullets = currentLine.startsWith("• ")
