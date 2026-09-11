@@ -48,6 +48,14 @@ import kotlin.math.roundToLong
 
 private const val PILL_ASSET_WIDTH = 178f
 private const val PILL_ASSET_HEIGHT = 56f
+// The official client uses `border-image: 27 27 27 27 fill` for its tier
+// frames. Keep that source inset independent from the dynamically measured
+// destination size so the illustrated corners never widen with the amount.
+private const val OFFICIAL_FRAME_SLICE_PX = 27f
+// Adjacent Canvas bitmap draws can leave a faint fractional-pixel seam when
+// filtering is enabled. A sub-pixel overdraw removes that gap without
+// changing the frame's measured bounds or visible cap geometry.
+private const val FRAME_SLICE_OVERDRAW_PX = 0.75f
 private const val PILL_HEIGHT_DP = 33
 private const val PILL_MIN_WIDTH_DP = 62
 private const val COMPACT_PILL_HEIGHT_DP = 27
@@ -290,7 +298,7 @@ private fun PillBackground(
             if (isStaff) {
                 drawBitmapToBounds(loadedBitmap)
             } else {
-                drawThreeSlice(loadedBitmap)
+                drawNineSlice(loadedBitmap)
             }
         }
     }
@@ -321,42 +329,70 @@ private fun DrawScope.drawBitmapToBounds(bitmap: Bitmap) {
     }
 }
 
-private fun DrawScope.drawThreeSlice(bitmap: Bitmap) {
-    val capWidth = size.height * 0.5f
-    val fullImageWidth = size.height * (PILL_ASSET_WIDTH / PILL_ASSET_HEIGHT)
+/**
+ * Canvas equivalent of the official client's CSS 9-slice `border-image`.
+ *
+ * Tier art is authored at 178×56 with a 27px frame inset on every edge. The
+ * four corners keep their aspect ratio, the top/bottom edges stretch only in
+ * X, the side edges stretch only in Y, and the centre is the only region that
+ * freely scales. This lets the pill hug any numeric value without deforming
+ * its rounded caps.
+ */
+private fun DrawScope.drawNineSlice(bitmap: Bitmap) {
+    val sourceLeft = (OFFICIAL_FRAME_SLICE_PX * bitmap.width / PILL_ASSET_WIDTH)
+        .roundToInt()
+        .coerceIn(1, (bitmap.width / 2).coerceAtLeast(1))
+    val sourceTop = (OFFICIAL_FRAME_SLICE_PX * bitmap.height / PILL_ASSET_HEIGHT)
+        .roundToInt()
+        .coerceIn(1, (bitmap.height / 2).coerceAtLeast(1))
+    val sourceRight = bitmap.width - sourceLeft
+    val sourceBottom = bitmap.height - sourceTop
+
+    // Scale a source corner by height only. This preserves the frame's native
+    // cap geometry regardless of the width selected by ComposeNetworthPill.
+    val targetLeft = size.height * sourceLeft / bitmap.height
+    val targetTop = size.height * sourceTop / bitmap.height
+    val targetRight = (size.width - targetLeft).coerceAtLeast(targetLeft)
+    val targetBottom = (size.height - targetTop).coerceAtLeast(targetTop)
+
+    val sourceX = intArrayOf(0, sourceLeft, sourceRight, bitmap.width)
+    val sourceY = intArrayOf(0, sourceTop, sourceBottom, bitmap.height)
+    val targetX = floatArrayOf(0f, targetLeft, targetRight, size.width)
+    val targetY = floatArrayOf(0f, targetTop, targetBottom, size.height)
 
     drawIntoCanvas { canvas ->
         val nativeCanvas = canvas.nativeCanvas
 
-        nativeCanvas.save()
-        nativeCanvas.clipRect(0f, 0f, capWidth, size.height)
-        nativeCanvas.drawBitmap(
-            bitmap,
-            null,
-            RectF(0f, 0f, fullImageWidth, size.height),
-            PillPaint,
-        )
-        nativeCanvas.restore()
+        fun drawPatch(row: Int, column: Int) {
+            val src = android.graphics.Rect(
+                sourceX[column],
+                sourceY[row],
+                sourceX[column + 1],
+                sourceY[row + 1],
+            )
+            // Render interior regions first, then let the bordering regions
+            // cover their joins. This is the Canvas equivalent of border-image
+            // painting and prevents filtering seams at fractional boundaries.
+            val destination = RectF(
+                (targetX[column] - if (column == 0) 0f else FRAME_SLICE_OVERDRAW_PX).coerceAtLeast(0f),
+                (targetY[row] - if (row == 0) 0f else FRAME_SLICE_OVERDRAW_PX).coerceAtLeast(0f),
+                (targetX[column + 1] + if (column == 2) 0f else FRAME_SLICE_OVERDRAW_PX).coerceAtMost(size.width),
+                (targetY[row + 1] + if (row == 2) 0f else FRAME_SLICE_OVERDRAW_PX).coerceAtMost(size.height),
+            )
+            nativeCanvas.drawBitmap(bitmap, src, destination, PillPaint)
+        }
 
-        nativeCanvas.save()
-        nativeCanvas.clipRect(capWidth, 0f, size.width - capWidth, size.height)
-        nativeCanvas.drawBitmap(
-            bitmap,
-            null,
-            RectF(0f, 0f, size.width, size.height),
-            PillPaint,
-        )
-        nativeCanvas.restore()
-
-        nativeCanvas.save()
-        nativeCanvas.clipRect(size.width - capWidth, 0f, size.width, size.height)
-        nativeCanvas.drawBitmap(
-            bitmap,
-            null,
-            RectF(size.width - fullImageWidth, 0f, size.width, size.height),
-            PillPaint,
-        )
-        nativeCanvas.restore()
+        // Paint from least to most visually important. The corners are last
+        // so their unchanged artwork always wins at the frame boundaries.
+        drawPatch(row = 1, column = 1)
+        drawPatch(row = 0, column = 1)
+        drawPatch(row = 2, column = 1)
+        drawPatch(row = 1, column = 0)
+        drawPatch(row = 1, column = 2)
+        drawPatch(row = 0, column = 0)
+        drawPatch(row = 0, column = 2)
+        drawPatch(row = 2, column = 0)
+        drawPatch(row = 2, column = 2)
     }
 }
 
