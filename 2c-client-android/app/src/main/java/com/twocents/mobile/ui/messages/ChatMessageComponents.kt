@@ -77,6 +77,7 @@ import com.twocents.mobile.ui.compose.GifPickerSheet
 import com.twocents.mobile.ui.feed.cacheMediaRatio
 import com.twocents.mobile.ui.feed.cachedMediaRatio
 import com.twocents.mobile.ui.feed.ImageLightbox
+import com.twocents.mobile.ui.feed.MediaUnavailableSurface
 import com.twocents.mobile.ui.common.PullToRefreshContainer
 import com.twocents.mobile.ui.common.RefreshProgressBar
 import com.twocents.mobile.ui.common.rememberPullToRefreshState
@@ -182,6 +183,7 @@ internal fun ChatMessageRow(
                     val replyText = if (replyMedia == null) rawReply.trim() else rawReply.replace(replyMedia, "").trim()
                     val bubbleShape = if (mine) RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
                     var mediaRatio by remember(inlineMedia) { mutableFloatStateOf(inlineMedia?.let(::cachedMediaRatio) ?: 1f) }
+                    var inlineMediaFailed by remember(inlineMedia) { mutableStateOf(false) }
                     Box {
                         Icon(
                             Icons.Outlined.Reply, null, tint = Gold,
@@ -244,29 +246,37 @@ internal fun ChatMessageRow(
                                 com.twocents.mobile.ui.feed.TweetEmbedCard(it)
                             }
                             inlineMedia?.let { media ->
-                                AsyncImage(
-                                    model = media,
-                                    contentDescription = "Open image",
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .padding(top = if (visibleText.isBlank()) 0.dp else 2.dp)
-                                        .width(278.dp)
-                                        .aspectRatio(mediaRatio.coerceAtLeast(.08f))
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .pointerInput(media) {
-                                            detectTapGestures(
-                                                onTap = { AppHaptics.open(view); lightboxMedia = media },
-                                                onLongPress = { AppHaptics.open(view); onLongPress() },
-                                            )
+                                val mediaModifier = Modifier
+                                    .padding(top = if (visibleText.isBlank()) 0.dp else 2.dp)
+                                    .width(278.dp)
+                                    .aspectRatio(mediaRatio.coerceAtLeast(.08f))
+                                if (inlineMediaFailed) {
+                                    // The adjacent LinkPreviewCards call remains visible for
+                                    // URL-backed media, giving users a tappable fallback.
+                                    MediaUnavailableSurface(mediaModifier) { inlineMediaFailed = false }
+                                } else {
+                                    AsyncImage(
+                                        model = media,
+                                        contentDescription = "Open image",
+                                        contentScale = ContentScale.Fit,
+                                        modifier = mediaModifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .pointerInput(media) {
+                                                detectTapGestures(
+                                                    onTap = { AppHaptics.open(view); lightboxMedia = media },
+                                                    onLongPress = { AppHaptics.open(view); onLongPress() },
+                                                )
+                                            },
+                                        onSuccess = { result ->
+                                            val image = result.result.image
+                                            if (image.width > 0 && image.height > 0) {
+                                                mediaRatio = image.width.toFloat() / image.height.toFloat()
+                                                cacheMediaRatio(media, mediaRatio)
+                                            }
                                         },
-                                    onSuccess = { result ->
-                                        val image = result.result.image
-                                        if (image.width > 0 && image.height > 0) {
-                                            mediaRatio = image.width.toFloat() / image.height.toFloat()
-                                            cacheMediaRatio(media, mediaRatio)
-                                        }
-                                    },
-                                )
+                                        onError = { inlineMediaFailed = true },
+                                    )
+                                }
                             }
                         }
                     }

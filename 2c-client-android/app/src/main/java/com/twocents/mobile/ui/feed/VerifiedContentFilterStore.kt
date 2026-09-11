@@ -13,7 +13,9 @@ internal object VerifiedContentFilterStore {
     // the account's subscription flag. Quotes are still filtered only outside.
     fun allows(post: FeedPost): Boolean = post.author.subscriptionType > 0 ||
         post.postType == 7 || post.authorUuid.equals("news", ignoreCase = true) ||
-        post.author.role.equals("news", ignoreCase = true)
+        post.authorUuid.equals("staff", ignoreCase = true) ||
+        post.author.role.equals("news", ignoreCase = true) ||
+        post.author.role.equals("staff", ignoreCase = true)
 
     private val observed = mutableStateMapOf<String, Boolean>()
 

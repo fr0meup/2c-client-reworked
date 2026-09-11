@@ -81,7 +81,15 @@ private val SettingsGold = Color(0xFFC8A44D)
 private data class HiddenUser(val uuid: String, val profile: ComposeAuthorProfile)
 
 @Composable
-internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, onOpenFeedback: () -> Unit, onOfflineChanged: (Boolean) -> Unit, onLogout: () -> Unit) {
+internal fun SettingsScreen(
+    auth: AuthState,
+    api: RpcApi,
+    onBack: () -> Unit,
+    onOpenProfile: (String, ComposeAuthorProfile?) -> Unit,
+    onOpenFeedback: () -> Unit,
+    onOfflineChanged: (Boolean) -> Unit,
+    onLogout: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val appVersion = remember(context) {
@@ -327,7 +335,12 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
                     AnimatedVisibility(privacyExpanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                         Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 9.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             if (muted.isEmpty() && blocked.isEmpty()) Text("No hidden users", color = Color.White.copy(alpha = .35f), fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-                            muted.forEach { user -> HiddenUserRow(user, "Muted", auth.userUuid) {
+                            muted.forEach { user -> HiddenUserRow(
+                                user = user,
+                                kind = "Muted",
+                                authUuid = auth.userUuid,
+                                onOpenProfile = { onOpenProfile(it.uuid, it.profile) },
+                            ) {
                                 muteStore.setMuted(user.uuid, false); muted = muted.filterNot { it.uuid == user.uuid }
                                 AppToast.success("User unmuted")
                             } }
@@ -593,8 +606,18 @@ internal fun SettingsScreen(auth: AuthState, api: RpcApi, onBack: () -> Unit, on
     }
 }
 
-@Composable private fun HiddenUserRow(user: HiddenUser, kind: String, authUuid: String, onRemove: () -> Unit) = Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = .025f)).padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-    ComposeNetworthPill(user.profile, authUuid, compact = true)
+@Composable private fun HiddenUserRow(
+    user: HiddenUser,
+    kind: String,
+    authUuid: String,
+    onOpenProfile: ((HiddenUser) -> Unit)? = null,
+    onRemove: () -> Unit,
+) = Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = .025f)).padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+    // Only muted users remain visitable: blocked entries deliberately retain
+    // their existing non-navigable behavior.
+    Box(if (onOpenProfile != null) Modifier.clickable { onOpenProfile(user) } else Modifier) {
+        ComposeNetworthPill(user.profile, authUuid, compact = true)
+    }
     UserMetaPill(user.profile.toUserDisplay(), null, Modifier.weight(1f).padding(start = 5.dp), compact = true)
     Text(kind, color = Color.White.copy(alpha = .3f), fontSize = 9.5.sp, modifier = Modifier.padding(horizontal = 6.dp))
     Text(if (kind == "Muted") "Unmute" else "Unblock", color = SettingsGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onRemove).padding(6.dp))

@@ -102,6 +102,7 @@ import androidx.media3.ui.PlayerView
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -121,6 +122,36 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
 private val MediaBackground = Color(0xFF0A0907)
+
+/**
+ * Shared failure state for still images and GIFs. LinkPreviewCards remains in
+ * the parent content flow, so a URL-backed image naturally falls back to its
+ * tappable link card instead of leaving a silent black media canvas.
+ */
+@Composable
+internal fun MediaUnavailableSurface(
+    modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MediaBackground)
+            .clickable(onClick = {})
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            "Couldn't load this image. Check your connection or try again. It may no longer be available.",
+            color = Color.White.copy(alpha = .78f), fontSize = 13.sp, textAlign = TextAlign.Center,
+        )
+        onRetry?.let { retry ->
+            Text("Retry", color = Color(0xFFC7A653), fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable(onClick = retry).padding(12.dp))
+        }
+    }
+}
 
 /** Routes a post's media to a single-image surface or equal-height gallery. */
 @Composable
@@ -183,6 +214,7 @@ private fun FeedSingleImage(
     val context = LocalContext.current
     var ratio by remember(uri) { mutableFloatStateOf(synchronized(MediaRatios) { MediaRatios[uri] } ?: 4f / 3f) }
     var bounds by remember(uri) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var failed by remember(uri) { mutableStateOf(false) }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -199,31 +231,36 @@ private fun FeedSingleImage(
             renderHeight = if (preserveFullImage) naturalHeight else minOf(380.dp, if (ratio >= 1.8f) naturalHeight else maxOf(160.dp, naturalHeight))
             renderWidth = if (preserveFullImage) maxWidth else minOf(maxWidth, renderHeight * ratio)
         }
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(uri)
-                .memoryCacheKey(uri)
-                .diskCacheKey(uri)
-                .build(),
-            contentDescription = null,
-            contentScale = if (compact && !preserveFullImage) ContentScale.Crop else ContentScale.Fit,
-            onSuccess = { success ->
-                val image = success.result.image
-                if (image.width > 0 && image.height > 0) {
-                    val nextRatio = image.width.toFloat() / image.height.toFloat()
-                    synchronized(MediaRatios) { MediaRatios[uri] = nextRatio }
-                    ratio = nextRatio
-                }
-            },
-            modifier = Modifier
-                .width(renderWidth)
-                .height(renderHeight)
-                .graphicsLayer { alpha = if (hidden) 0f else 1f }
-                .clip(RoundedCornerShape(if (compact) 12.dp else 14.dp))
-                .background(MediaBackground)
-                .onGloballyPositioned { bounds = it.boundsInWindow() }
-                .clickable { bounds?.let { onClick(it.toImageOriginRect()) } },
-        )
+        if (failed) {
+            MediaUnavailableSurface(Modifier.width(renderWidth).height(renderHeight)) { failed = false }
+        } else {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(uri)
+                    .memoryCacheKey(uri)
+                    .diskCacheKey(uri)
+                    .build(),
+                contentDescription = null,
+                contentScale = if (compact && !preserveFullImage) ContentScale.Crop else ContentScale.Fit,
+                onSuccess = { success ->
+                    val image = success.result.image
+                    if (image.width > 0 && image.height > 0) {
+                        val nextRatio = image.width.toFloat() / image.height.toFloat()
+                        synchronized(MediaRatios) { MediaRatios[uri] = nextRatio }
+                        ratio = nextRatio
+                    }
+                },
+                onError = { failed = true },
+                modifier = Modifier
+                    .width(renderWidth)
+                    .height(renderHeight)
+                    .graphicsLayer { alpha = if (hidden) 0f else 1f }
+                    .clip(RoundedCornerShape(if (compact) 12.dp else 14.dp))
+                    .background(MediaBackground)
+                    .onGloballyPositioned { bounds = it.boundsInWindow() }
+                    .clickable { bounds?.let { onClick(it.toImageOriginRect()) } },
+            )
+        }
     }
 }
 
@@ -347,6 +384,7 @@ private fun GalleryImage(
     val context = LocalContext.current
     var ratio by remember(uri) { mutableFloatStateOf(synchronized(MediaRatios) { MediaRatios[uri] } ?: 1f) }
     var bounds by remember(uri) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var failed by remember(uri) { mutableStateOf(false) }
     val width = if (preserveFullImage) fullWidth else (if (compact) 160.dp else 280.dp) * ratio.coerceIn(0.2f, 5f) * scale
     val height = if (preserveFullImage) fullWidth / ratio.coerceAtLeast(.2f) else (if (compact) 160.dp else 280.dp) * scale
     val shape = RoundedCornerShape(if (compact) 10.dp else 12.dp)
@@ -360,36 +398,43 @@ private fun GalleryImage(
             .onGloballyPositioned { bounds = it.boundsInWindow() }
             .clickable { bounds?.let { onClick(it.toImageOriginRect()) } },
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
-            contentDescription = null,
-            contentScale = if (preserveFullImage) ContentScale.Fit else ContentScale.FillBounds,
-            onSuccess = { success ->
-                val image = success.result.image
-                if (image.width > 0 && image.height > 0) {
-                    val next = image.width.toFloat() / image.height.toFloat()
-                    synchronized(MediaRatios) { MediaRatios[uri] = next }
-                    ratio = next
-                    onRatio(next)
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (failed) {
+            MediaUnavailableSurface(Modifier.fillMaxSize()) { failed = false }
+        } else {
+            AsyncImage(
+                model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
+                contentDescription = null,
+                contentScale = if (preserveFullImage) ContentScale.Fit else ContentScale.FillBounds,
+                onSuccess = { success ->
+                    val image = success.result.image
+                    if (image.width > 0 && image.height > 0) {
+                        val next = image.width.toFloat() / image.height.toFloat()
+                        synchronized(MediaRatios) { MediaRatios[uri] = next }
+                        ratio = next
+                        onRatio(next)
+                    }
+                },
+                onError = { failed = true },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
 @Composable
 internal fun FeedGif(uri: String) {
     val context = LocalContext.current
-    AsyncImage(
-        model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
-        contentDescription = null,
-        contentScale = ContentScale.Fit,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp)
-            .height(220.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MediaBackground),
-    )
+    var failed by remember(uri) { mutableStateOf(false) }
+    val modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(220.dp)
+    if (failed) {
+        MediaUnavailableSurface(modifier) { failed = false }
+    } else {
+        AsyncImage(
+            model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            onError = { failed = true },
+            modifier = modifier.clip(RoundedCornerShape(12.dp)).background(MediaBackground),
+        )
+    }
 }

@@ -192,14 +192,14 @@ private fun NativeTweetContent(tweet: NativeTweet, nested: Boolean = false) {
 private fun TweetMediaContent(media: List<TweetMedia>) {
     if (media.isEmpty()) return
     val images = media.filter { it.kind == TweetMediaKind.Image }.map { it.url }
-    if (images.isNotEmpty()) FeedPostMedia(images, compact = true, preserveFullImage = true)
+    // X multi-image galleries intentionally share the postcard/detail gallery
+    // path. It keeps every slide at one measured height instead of allowing
+    // each natural image ratio to make a different-height carousel item.
+    if (images.isNotEmpty()) FeedPostMedia(images, compact = true)
     media.filter { it.kind != TweetMediaKind.Image }.forEach { item ->
         val actualImageGif = item.kind == TweetMediaKind.Gif && !item.url.contains(".mp4", true) && !item.url.contains(".m3u8", true)
         if (actualImageGif) {
-            AsyncImage(
-                model = item.url, contentDescription = "GIF", contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().padding(top = 9.dp).heightIn(min = 150.dp, max = 300.dp).clip(RoundedCornerShape(11.dp)).background(Color.Black),
-            )
+            FeedPostMedia(listOf(item.url), compact = true, preserveFullImage = true)
         } else {
             FeedVideoPlayer(item.url, compact = true)
         }

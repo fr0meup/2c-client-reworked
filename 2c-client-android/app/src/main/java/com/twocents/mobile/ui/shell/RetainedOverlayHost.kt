@@ -178,6 +178,7 @@ internal fun RetainedOverlayHost(
                             auth = auth,
                             api = api,
                             onBack = onPop,
+                            onOpenProfile = onPushProfile,
                             onOpenFeedback = onOpenFeedback,
                             onOfflineChanged = onOfflineChanged,
                             onLogout = onLogout,
