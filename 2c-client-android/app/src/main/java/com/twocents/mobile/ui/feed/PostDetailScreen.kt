@@ -216,13 +216,13 @@ internal fun PostDetailScreen(
             enabled = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
             onRefresh = {
                 val success = controller.refresh()
-                val resultsSuccess = if (success) sourceController.refreshResults(
+                if (success) sourceController.refreshResultsInBackground(
                     listOfNotNull(controller.state.post),
                     pollVotes = if (controller.state.pollVote != null) setOf(seedPost.uuid) else emptySet(),
                     likertVotes = if (controller.state.likertVote != null) setOf(seedPost.uuid) else emptySet(),
-                ) else false
-                onNotificationsFallback?.invoke()
-                success && resultsSuccess
+                )
+                com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { onNotificationsFallback?.invoke() }
+                success
             },
             modifier = Modifier.weight(1f),
         ) {

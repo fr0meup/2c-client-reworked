@@ -11,8 +11,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlin.random.Random
 
-/** One shared budget for every discovery phase, including the 20 index workers.
- * Stagger starts rather than releasing synchronized bursts. A 429 pauses all
+/** One shared budget for every discovery phase, including background index workers.
+ * Normal speed is controlled by per-phase concurrency, not a gap per RPC.
+ * A 429 pauses all
  * workers, then resumes slowly; no request is treated as a negative follower. */
 internal class ScanRequestPacer(
     private val onPause: (String?) -> Unit = {},
@@ -20,11 +21,11 @@ internal class ScanRequestPacer(
     private val sleep: suspend (Long) -> Unit = { delay(it) },
     private val jitter: () -> Long = { Random.nextLong(0, 101) },
 ) : RpcRequestPolicy() {
-    private val slots = Semaphore(4)
+    private val slots = Semaphore(10)
     private val lock = Mutex()
     private var nextStart = 0L
     private var cooldownUntil = 0L
-    private var interval = 250L
+    private var interval = 0L
     private var cooldown = 30_000L
     private var successes = 0
 
@@ -38,7 +39,7 @@ internal class ScanRequestPacer(
                     val time = now()
                     val remaining = maxOf(nextStart, cooldownUntil) - time
                     if (remaining <= 0) {
-                        nextStart = time + interval + jitter()
+                        nextStart = time + interval + if (interval > 0) jitter() else 0
                         onPause(null)
                     }
                     remaining
@@ -50,8 +51,9 @@ internal class ScanRequestPacer(
                 val result = request()
                 lock.withLock {
                     successes++
-                    if (successes >= 40) {
-                        interval = (interval - 50).coerceAtLeast(250)
+                    if (successes >= 20) {
+                        interval = if (interval <= 50) 0 else interval / 2
+                        if (interval == 0L) cooldown = 30_000L
                         successes = 0
                     }
                 }
@@ -66,7 +68,7 @@ internal class ScanRequestPacer(
                     if (cooldownUntil <= time) {
                         cooldownUntil = time + maxOf(cooldown, serverWait) + jitter()
                         cooldown = (cooldown * 2).coerceAtMost(300_000)
-                        interval = (interval * 2).coerceAtMost(2_000)
+                        interval = (interval * 2).coerceIn(50, 1_000)
                         successes = 0
                     } else cooldownUntil = maxOf(cooldownUntil, time + serverWait)
                     onPause("Rate limited — pausing the scan before retrying…")

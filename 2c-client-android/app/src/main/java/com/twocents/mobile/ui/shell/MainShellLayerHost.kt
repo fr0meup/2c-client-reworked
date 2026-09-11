@@ -14,6 +14,7 @@ import com.twocents.mobile.AuthState
 import com.twocents.mobile.RpcApi
 import com.twocents.mobile.notifications.NotificationController
 import com.twocents.mobile.ui.compose.createComposePost
+import com.twocents.mobile.ui.compose.launchPostPublishFollowUp
 import com.twocents.mobile.ui.common.notifyMentions
 import com.twocents.mobile.ui.common.AppToast
 import com.twocents.mobile.ui.feed.FeedController
@@ -131,13 +132,30 @@ internal fun BoxScope.MainShellLayerHost(
                 feedListState.firstVisibleItemIndex == 0 && feedListState.firstVisibleItemScrollOffset <= nearTopPx
             val postedPost = createComposePost(api, auth, draft, context)
             if (postedPost != null) {
-                notifyMentions(api, auth, draft.body, postedPost.uuid, contentType = "post")
+                // The create response is the publication boundary. Notifications,
+                // refreshes and UI frame work cannot change that success to false.
+                val background = com.twocents.mobile.ui.common.AppBackgroundTasks.mutations
+                background.launchPostPublishFollowUp("Post published, but mentions couldn't be sent") {
+                    notifyMentions(api, auth, draft.body, postedPost.uuid, contentType = "post")
+                }
+                background.launchPostPublishFollowUp("Post published, but your profile couldn't refresh") {
+                    refreshOwnProfile()
+                }
                 composeQuotedPost = null
-                refreshOwnProfile()
-                feedController.refresh(activeTopic, searchQuery)
-                withFrameNanos { }
-                if (wasAtTopOfNew) feedListState.scrollToItem(0)
-                else pushPost(OpenedPost(postedPost, feedController))
+                val submittedTopic = activeTopic
+                val submittedQuery = searchQuery
+                scope.launchPostPublishFollowUp("Post published, but the feed couldn't refresh") {
+                    val refreshed = feedController.refresh(submittedTopic, submittedQuery)
+                    if (!refreshed) error("Feed refresh failed")
+                    if (wasAtTopOfNew && selectedTab == AppTab.Feed &&
+                        activeTopic == submittedTopic && searchQuery == submittedQuery) {
+                        withFrameNanos { }
+                        feedListState.scrollToItem(0)
+                    }
+                }
+                scope.launchPostPublishFollowUp("Post published, but couldn't open its page") {
+                    if (!wasAtTopOfNew) pushPost(OpenedPost(postedPost, feedController))
+                }
             }
             postedPost != null
         },

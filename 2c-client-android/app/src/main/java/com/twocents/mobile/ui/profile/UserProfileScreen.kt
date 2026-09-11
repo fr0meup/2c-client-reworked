@@ -188,7 +188,7 @@ fun UserProfileContent(
         enabled = !graphGestureActive && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
         onRefresh = {
             val ok = controller.load(force = true)
-            val resultsOk = if (ok) feedController.refreshResults(
+            if (ok) feedController.refreshResultsInBackground(
                 when (tab) {
                     ProfileTab.Posts -> controller.state.posts
                     ProfileTab.Votes -> controller.state.votedPosts
@@ -196,9 +196,9 @@ fun UserProfileContent(
                 },
                 pollVotes = controller.state.polls.keys,
                 likertVotes = controller.state.likerts.keys,
-            ) else false
-            onNotificationsFallback()
-            ok && resultsOk
+            )
+            com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { onNotificationsFallback() }
+            ok
         },
         modifier = modifier.fillMaxSize(),
         indicatorTopOffset = 4.dp,

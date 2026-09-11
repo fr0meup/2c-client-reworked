@@ -27,6 +27,7 @@ import java.util.Locale
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 
 /**
@@ -50,6 +51,7 @@ class FeedController(
     private val likertResultsCache = mutableMapOf<String, Map<Int, FeedOptionResult>>()
     private val picksResultsCache = mutableMapOf<String, FeedPicksResult>()
     private val resultRequests = FeedResultRequests()
+    private var resultRefreshJob: kotlinx.coroutines.Job? = null
     internal val pendingMutations = mutableSetOf<String>()
     private var aliasesLoaded = false
     internal var aliases: Map<String, String> = emptyMap()
@@ -117,7 +119,23 @@ class FeedController(
 
     suspend fun refresh(topic: String, query: String, onPostsReady: () -> Unit = {}): Boolean {
         load(topic, query, force = true, onPostsReady = onPostsReady)
-        return if (state.error == null) refreshResults(state.posts) else false
+        if (state.error != null) return false
+        refreshResultsInBackground(state.posts)
+        return true
+    }
+
+    /** The page is ready independently of its result endpoints. Keep old results
+     * visible while revalidating, without keeping pull-to-refresh spinning.
+     * A newer explicit refresh supersedes the previous result-refresh job. */
+    internal fun refreshResultsInBackground(
+        posts: List<FeedPost>,
+        pollVotes: Set<String> = state.pollVotes.keys,
+        likertVotes: Set<String> = state.likertVotes.keys,
+    ) {
+        resultRefreshJob?.cancel()
+        resultRefreshJob = com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
+            refreshResults(posts, pollVotes, likertVotes)
+        }
     }
 
     /** Refresh a page's interactive results with bounded concurrency. Other cards

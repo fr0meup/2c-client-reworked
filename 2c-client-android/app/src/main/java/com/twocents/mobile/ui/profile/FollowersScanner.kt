@@ -135,6 +135,8 @@ internal object FollowersScanner {
     }
 
     private suspend fun scan(context: Context, api: RpcApi, auth: AuthState) {
+        // Half of v0.1.8 concurrency in each phase, with its original batch pauses.
+        // This targets roughly twice the old duration without a fixed gap per RPC.
         val scanStartedAt = System.currentTimeMillis()
         val candidates = LinkedHashSet<String>() // Deliberately case-sensitive.
         candidates += FollowersScanStore(context, auth.userUuid).read().candidates
@@ -157,10 +159,10 @@ internal object FollowersScanner {
             } }
         }
         update(auth.userUuid) { it.copy(phase = "Checking room members…", completed = 0, total = roomUuids.size) }
-        roomUuids.toList().chunked(6).forEachIndexed { batch, ids ->
+        roomUuids.toList().chunked(3).forEachIndexed { batch, ids ->
             coroutineScope { ids.map { room -> async { retryRpc { api.call("/v1/rooms/getMembers", JSONObject().put("roomUuid", room), auth) } } }.awaitAll() }
                 .forEach { collectValues(it, setOf("user_uuid"), candidates) }
-            update(auth.userUuid) { it.copy(completed = ((batch + 1) * 6).coerceAtMost(roomUuids.size)) }
+            update(auth.userUuid) { it.copy(completed = ((batch + 1) * 3).coerceAtMost(roomUuids.size)) }
             delay(120)
         }
         val boardNames = boards?.optJSONArray("leaderboards")?.stringObjects("name") ?: emptyList()
@@ -170,17 +172,17 @@ internal object FollowersScanner {
             }
         }
         update(auth.userUuid) { it.copy(phase = "Checking leaderboards…", completed = 0, total = boardNames.size) }
-        boardNames.chunked(6).forEachIndexed { batch, names ->
+        boardNames.chunked(3).forEachIndexed { batch, names ->
             coroutineScope { names.map { name -> async { retryRpc { api.call("/v1/leaderboard/get", JSONObject().put("name", name), auth) } } }.awaitAll() }
                 .forEach { root -> collectValues((root as? JSONObject)?.optJSONArray("leaderboard"), setOf("uuid", "user_uuid"), candidates) }
-            update(auth.userUuid) { it.copy(completed = ((batch + 1) * 6).coerceAtMost(boardNames.size)) }
+            update(auth.userUuid) { it.copy(completed = ((batch + 1) * 3).coerceAtMost(boardNames.size)) }
         }
 
-        update(auth.userUuid) { it.copy(phase = "Updating the post index…", completed = 0, total = 20) }
+        update(auth.userUuid) { it.copy(phase = "Updating the post index…", completed = 0, total = 10) }
         AdvancedSearchIndex.initialize(context)
         val search = withContext(Dispatchers.Main.immediate) { FeedController(api, auth, FeedSource.Arena, context) }
         withContext(Dispatchers.Main.immediate) {
-            search.loadAdvanced(AdvancedSearchFilters(dateFrom = "2024-11-01"), force = true)
+            search.loadAdvanced(AdvancedSearchFilters(dateFrom = "2024-11-01"), force = true, workerCount = 10)
         }
         search.state.error?.let { error(it) } // Never publish a partial discovery as a successful full scan.
         withContext(Dispatchers.IO) { AdvancedSearchIndex.snapshot() }.forEach { candidates += it.authorUuid }
@@ -194,7 +196,7 @@ internal object FollowersScanner {
         }
         update(auth.userUuid) { it.copy(phase = "Checking who follows you…", completed = 0, total = candidates.size) }
         val followerUuids = ArrayList<String>()
-        candidates.toList().chunked(12).forEachIndexed { batch, ids ->
+        candidates.toList().chunked(6).forEachIndexed { batch, ids ->
             val found = coroutineScope {
                 ids.map { uuid -> async {
                     val root = retryRpc { api.call("/v1/aliases/hasMe", JSONObject().put("authorUUID", uuid), auth) } as? JSONObject
@@ -204,15 +206,15 @@ internal object FollowersScanner {
                 } }.awaitAll().filterNotNull()
             }
             followerUuids += found
-            val done = ((batch + 1) * 12).coerceAtMost(candidates.size)
+            val done = ((batch + 1) * 6).coerceAtMost(candidates.size)
             update(auth.userUuid) { it.copy(completed = done) }
             if (batch % 4 == 3) delay(240) else delay(80)
         }
         update(auth.userUuid) { it.copy(phase = "Loading follower details…", completed = 0, total = followerUuids.size) }
         val followers = ArrayList<FollowerEntry>()
-        followerUuids.chunked(8).forEachIndexed { batch, ids ->
+        followerUuids.chunked(4).forEachIndexed { batch, ids ->
             followers += coroutineScope { ids.map { uuid -> async { loadFollower(api, auth, uuid, aliasByUuid[uuid]) } }.awaitAll().filterNotNull() }
-            update(auth.userUuid) { it.copy(completed = ((batch + 1) * 8).coerceAtMost(followerUuids.size)) }
+            update(auth.userUuid) { it.copy(completed = ((batch + 1) * 4).coerceAtMost(followerUuids.size)) }
             delay(100)
         }
         val snapshot = store.modify { latest ->

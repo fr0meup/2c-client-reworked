@@ -97,10 +97,12 @@ internal fun MainShellSceneRouter(
                         if (feedController.state.error == null) feedListState.requestScrollToItem(0)
                         // Refresh the first results page, not thousands of indexed
                         // posts. Remaining cards revalidate when they enter view.
-                        feedController.state.error == null && feedController.refreshResults(feedController.state.posts.take(20))
+                        if (feedController.state.error == null) feedController.refreshResultsInBackground(feedController.state.posts.take(20))
+                        feedController.state.error == null
                     } ?: feedController.refresh(activeTopic, searchQuery) { feedListState.requestScrollToItem(0) }
-                    notificationController.load(force = true)
-                    refreshOwnProfile()
+                    // Ancillary sidebar data must not prolong the feed spinner.
+                    scope.launch { notificationController.load(force = true) }
+                    scope.launch { refreshOwnProfile() }
                     val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
                     delay((360L - elapsedMs).coerceAtLeast(0L))
                     succeeded
@@ -251,7 +253,7 @@ internal fun MainShellSceneRouter(
                 },
                 onRefresh = {
                     val succeeded = messagesController.load(force = true)
-                    notificationController.load(force = true)
+                    scope.launch { notificationController.load(force = true) }
                     succeeded
                 },
                 onOpenRoom = { room ->
@@ -305,7 +307,7 @@ internal fun MainShellSceneRouter(
                 onNavigateProfile = openAccountSidebar,
                 onRefresh = {
                     val succeeded = bookmarkController.refresh("Bookmarks", "")
-                    notificationController.load(force = true)
+                    scope.launch { notificationController.load(force = true) }
                     if (succeeded) { withFrameNanos { }; bookmarkListState.animateScrollToItem(0) }
                     succeeded
                 },

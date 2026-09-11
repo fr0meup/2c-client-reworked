@@ -326,7 +326,7 @@ fun ComposePostModal(
         val submittedSession = composeSession
         val submittedDraftId = loadedDraftId
         com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
-            val success = runCatching {
+            val outcome = runCatching {
                 latestOnPost.value(
                     ComposePostDraft(
                         title = title.trim(),
@@ -335,7 +335,8 @@ fun ComposePostModal(
                         mediaUris = mediaUris, pollLink = pollLink, quotedPost = draftQuotedPost,
                     ),
                 )
-            }.getOrDefault(false)
+            }
+            val success = outcome.getOrDefault(false)
             if (composeSession == submittedSession) isSubmitting = false
             if (success) {
                 AppToast.success("Post published")
@@ -345,7 +346,9 @@ fun ComposePostModal(
                     if (loadedDraftId == draftId) loadedDraftId = null
                 }
                 scope.launch { if (composeSession == submittedSession) closeModal() }
-            } else AppToast.error("Couldn't publish post")
+            } else AppToast.error(outcome.exceptionOrNull()?.let {
+                com.twocents.mobile.ui.common.friendlyError(it, "Couldn't publish post")
+            } ?: "Couldn't publish post")
         }
     }
 

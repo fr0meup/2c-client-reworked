@@ -32,7 +32,7 @@ internal fun FeedController.prepareAdvancedSearch(filters: AdvancedSearchFilters
     )
 }
 
-internal suspend fun FeedController.loadAdvanced(filters: AdvancedSearchFilters, force: Boolean = false): Boolean {
+internal suspend fun FeedController.loadAdvanced(filters: AdvancedSearchFilters, force: Boolean = false, workerCount: Int = 20): Boolean {
     val from = filters.dateFrom.takeIf(String::isNotBlank)?.let { runCatching { Instant.parse("${it}T00:00:00Z") }.getOrNull() }
         ?: Instant.parse("2024-12-06T00:00:00Z")
     val to = filters.dateTo.takeIf(String::isNotBlank)?.let { runCatching { Instant.parse("${it}T23:59:59.999Z") }.getOrNull() }
@@ -80,11 +80,12 @@ internal suspend fun FeedController.loadAdvanced(filters: AdvancedSearchFilters,
                 if (freshnessStart.isBefore(to)) add(freshnessStart to to)
             }
         }
-        // Divide only missing time ranges among exactly twenty workers. Splitting
+        // Interactive search keeps twenty workers; discovery may request fewer.
+        // Divide only missing time ranges. Splitting
         // by time avoids workers racing over the same cursor chain.
         val ranges = missingRanges.flatMapIndexed { rangeIndex, (start, end) ->
             val seconds = java.time.Duration.between(start, end).seconds.coerceAtLeast(1L)
-            val workers = 20 / missingRanges.size + if (rangeIndex < 20 % missingRanges.size) 1 else 0
+            val workers = workerCount.coerceIn(1, 20) / missingRanges.size + if (rangeIndex < workerCount.coerceIn(1, 20) % missingRanges.size) 1 else 0
             (0 until workers).map { index ->
                 start.plusSeconds(seconds * index / workers) to start.plusSeconds(seconds * (index + 1) / workers)
             }
