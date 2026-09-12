@@ -89,9 +89,19 @@ internal fun FeedPicksCard(
 @Composable
 internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, controller: FeedController? = null, authUuid: String? = null) {
     val scope = rememberCoroutineScope()
+    var loadedPollVote by remember(quote.uuid, controller) { mutableStateOf<Int?>(null) }
+    // A parent-feed response contains votes for outer posts and can replace
+    // the controller maps after the original's detail request has completed.
+    // Retain that original's selection in the quote while observing new votes.
+    val livePollVote = controller?.state?.pollVotes?.get(quote.uuid)
+    LaunchedEffect(livePollVote) {
+        if (livePollVote != null) loadedPollVote = livePollVote
+    }
     // Quoted originals have their own interaction state, keyed by the original UUID.
     LaunchedEffect(quote.uuid, controller) {
-        if (quote.hasPoll) controller?.loadQuoteInteractions(quote.uuid)
+        if (quote.hasPoll && controller != null && controller.loadQuoteInteractions(quote.uuid)) {
+            loadedPollVote = controller.state.pollVotes[quote.uuid]
+        }
     }
     val content = remember(quote.uuid, quote.text, quote.meta.giphyUrl) { prepareFeedPostContent(quote) }
     val tweetUrl = quote.meta.tweetUrl ?: commentTweetUrl(quote.meta.link.orEmpty()) ?: commentTweetUrl(quote.text)
@@ -131,7 +141,7 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, contr
         val videoUrl = quote.meta.videoUrl
         if (quote.hasPoll) FeedPollCard(
             post = quote,
-            userVote = controller?.state?.pollVotes?.get(quote.uuid),
+            userVote = livePollVote ?: loadedPollVote,
             results = controller?.state?.pollResults?.get(quote.uuid),
             isOwner = authUuid == quote.authorUuid,
             onVote = { option ->

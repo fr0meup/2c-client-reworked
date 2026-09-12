@@ -79,7 +79,18 @@ internal fun RoomInfoSheet(
     val listState = rememberLazyListState()
     var members by remember(room.uuid) { mutableStateOf(room.members.filter { it.leftAt == null }.distinctBy { it.uuid }) }
     var loading by remember(room.uuid) { mutableStateOf(true) }
-    var resolvedRoomCode by remember(room.uuid) { mutableStateOf(room.roomCode) }
+    val inviteCodes = remember(context) {
+        context.applicationContext.getSharedPreferences("twocents-room-invites", android.content.Context.MODE_PRIVATE)
+    }
+    var resolvedRoomCode by remember(room.uuid) { mutableStateOf(resolveRoomInviteCode(
+        room.roomCode ?: inviteCodes.getString(room.uuid, null), room.name, room.description,
+    )) }
+    LaunchedEffect(room.uuid, room.roomCode, room.name, room.description) {
+        resolveRoomInviteCode(room.roomCode ?: resolvedRoomCode, room.name, room.description)?.let {
+            resolvedRoomCode = it
+            inviteCodes.edit().putString(room.uuid, it).apply()
+        }
+    }
     var visibleCount by remember(room.uuid) { mutableIntStateOf(MemberPageSize) }
     var paging by remember(room.uuid) { mutableStateOf(false) }
     val density = LocalDensity.current
@@ -104,9 +115,13 @@ internal fun RoomInfoSheet(
         if (resolvedRoomCode.isNullOrBlank()) runCatching {
             val roomRoot = api.call("/v1/rooms/getRoom", JSONObject().put("roomUuid", room.uuid), auth) as? JSONObject
             val item = roomRoot?.optJSONObject("room")
-            item?.optString("room_code").takeUnless { it.isNullOrBlank() || it == "null" }
+            val code = item?.optString("room_code").takeUnless { it.isNullOrBlank() || it == "null" }
                 ?: item?.optString("roomCode").takeUnless { it.isNullOrBlank() || it == "null" }
-        }.getOrNull()?.let { resolvedRoomCode = it }
+            resolveRoomInviteCode(code, item?.optString("name").orEmpty(), item?.optString("description").orEmpty())
+        }.getOrNull()?.let {
+            resolvedRoomCode = it
+            inviteCodes.edit().putString(room.uuid, it).apply()
+        }
         runCatching {
             val root = api.call("/v1/rooms/getMembers", JSONObject().put("roomUuid", room.uuid), auth) as? JSONObject
             val array = root?.optJSONArray("members") ?: JSONArray()

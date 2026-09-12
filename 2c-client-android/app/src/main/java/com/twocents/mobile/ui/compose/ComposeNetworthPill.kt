@@ -122,13 +122,13 @@ fun ComposeNetworthPill(
     val balance = profile?.balance?.takeIf(Double::isFinite) ?: 0.0
     val uuid = (profile?.uuid ?: authUuid).orEmpty()
     val tier = resolvePillTier(
-        uuid = uuid,
+        uuid = if (showNumericBalance) "" else uuid,
         subscriptionType = profile?.subscriptionType ?: 1,
         balance = balance,
-        role = profile?.role,
+        role = if (showNumericBalance) null else profile?.role,
     )
     val pillColor = PillColors.getValue(tier)
-    // Profile headers expose the balance while retaining the special tier artwork.
+    // Profile headers use ordinary verification/balance tiers, including for staff.
     val specialLabel = if (showNumericBalance) null else SpecialLabels[tier]
     val formattedValue = NumberFormat.getIntegerInstance(Locale.US).format(balance.roundToLong())
     val displayValue = specialLabel ?: formattedValue

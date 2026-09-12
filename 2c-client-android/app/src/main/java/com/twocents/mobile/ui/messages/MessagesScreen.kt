@@ -112,7 +112,9 @@ class MessagesController(private val api: RpcApi, private val auth: AuthState, c
     private val inviteCodes = context.applicationContext.getSharedPreferences("twocents-room-invites", Context.MODE_PRIVATE)
 
     private fun restoreInviteCodes(rooms: List<RoomSummary>) = rooms.map { room ->
-        room.copy(roomCode = room.roomCode ?: inviteCodes.getString(room.uuid, null))
+        room.copy(roomCode = resolveRoomInviteCode(
+            room.roomCode ?: inviteCodes.getString(room.uuid, null), room.name, room.description,
+        ))
     }
 
     private fun rememberInviteCode(roomUuid: String, roomCode: String?) {
