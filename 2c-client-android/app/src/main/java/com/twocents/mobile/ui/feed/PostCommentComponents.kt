@@ -174,9 +174,9 @@ internal fun PostCommentRow(
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 UserNetworthPill(displayAuthor, compact = true)
-                Text(feedTimeAgo(comment.createdAt), color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
+                CommentTimestamp(comment.createdAt, Modifier.weight(1f))
             }
             if (!comment.deleted) CommentOptionsButton(comment, ownComment, onDelete)
         }

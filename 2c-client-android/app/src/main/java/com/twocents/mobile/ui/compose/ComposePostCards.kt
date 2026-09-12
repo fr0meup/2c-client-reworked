@@ -179,9 +179,9 @@ private fun ComposeSmallInput(
             .clip(RoundedCornerShape(10.dp))
             .background(Color.White.copy(alpha = 0.03f))
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         BasicTextField(
+            modifier = Modifier.fillMaxWidth(),
             value = value,
             onValueChange = { onValueChange(it.take(80)) },
             singleLine = true,
@@ -193,6 +193,8 @@ private fun ComposeSmallInput(
             ),
             cursorBrush = SolidColor(Color.White),
             decorationBox = { inner ->
+                // Decoration belongs to the field so its full padded area accepts taps.
+                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                 if (value.isEmpty()) Text(
                     placeholder,
                     color = Color.White.copy(alpha = 0.3f),
@@ -201,6 +203,7 @@ private fun ComposeSmallInput(
                     style = TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)),
                 )
                 inner()
+                }
             },
         )
     }

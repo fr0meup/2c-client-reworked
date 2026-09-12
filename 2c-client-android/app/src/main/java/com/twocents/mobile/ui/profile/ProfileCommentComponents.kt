@@ -119,7 +119,7 @@ internal fun ProfileCommentCard(comment: ProfileComment, currentVote: Int, alias
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     UserMetaPill(comment.author.toUserDisplay(comment.authorUuid, alias), alias, Modifier, compact = true, fillWidth = false, elo = null)
                 }
-                Text(feedTimeAgo(comment.createdAt), color = Color.White.copy(alpha = .4f), fontSize = 12.sp, maxLines = 1, softWrap = false, style = NoProfilePadding)
+                com.twocents.mobile.ui.feed.CommentTimestamp(comment.createdAt, Modifier.widthIn(max = 160.dp))
             }
             Row(
                 Modifier.height(34.dp).clip(CircleShape).background(Color.White.copy(alpha = .05f)).border(1.dp, ProfileGold.copy(alpha = .22f), CircleShape).padding(horizontal = 3.5.dp),

@@ -29,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,7 +87,12 @@ internal fun FeedPicksCard(
 }
 
 @Composable
-internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null) {
+internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, controller: FeedController? = null, authUuid: String? = null) {
+    val scope = rememberCoroutineScope()
+    // Quoted originals have their own interaction state, keyed by the original UUID.
+    LaunchedEffect(quote.uuid, controller) {
+        if (quote.hasPoll) controller?.loadQuoteInteractions(quote.uuid)
+    }
     val content = remember(quote.uuid, quote.text, quote.meta.giphyUrl) { prepareFeedPostContent(quote) }
     val tweetUrl = quote.meta.tweetUrl ?: commentTweetUrl(quote.meta.link.orEmpty()) ?: commentTweetUrl(quote.text)
     val quoteText = if (tweetUrl != null) stripEmbeddedTweetLink(content.visibleText, tweetUrl) else content.visibleText
@@ -122,6 +129,18 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null) {
             )
         }
         val videoUrl = quote.meta.videoUrl
+        if (quote.hasPoll) FeedPollCard(
+            post = quote,
+            userVote = controller?.state?.pollVotes?.get(quote.uuid),
+            results = controller?.state?.pollResults?.get(quote.uuid),
+            isOwner = authUuid == quote.authorUuid,
+            onVote = { option ->
+                if (controller != null) com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
+                    controller.votePoll(quote.uuid, option)
+                } else onClick?.invoke()
+            },
+            ensureResults = { scope.launch { controller?.ensurePollResults(quote.uuid) } },
+        )
         tweetUrl?.let { TweetEmbedCard(it) }
         com.twocents.mobile.ui.common.LinkPreviewCards(quote.text, quote.meta.link)
         if (!videoUrl.isNullOrBlank()) {

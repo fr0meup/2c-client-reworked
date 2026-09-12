@@ -144,7 +144,7 @@ fun ProfilePageHeader(
                         onClick = onNetworthClick,
                     ),
             ) {
-                ComposeNetworthPill(profile = profile, authUuid = authUuid)
+                ComposeNetworthPill(profile = profile, authUuid = authUuid, showNumericBalance = true)
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                 if (isOwn) {

@@ -257,7 +257,7 @@ internal fun FeedPostCard(
             }
             com.twocents.mobile.ui.common.LinkPreviewCards(post.text, post.meta.link)
             post.meta.quotePost?.let { quote ->
-                FeedQuoteCard(quote, onClick = onOpenPost?.let { open -> { open(quote) } })
+                FeedQuoteCard(quote, onClick = onOpenPost?.let { open -> { open(quote) } }, controller = controller, authUuid = authUuid)
             }
 
             FeedPostActions(
