@@ -12,8 +12,8 @@ internal data class TopicGroup(
 )
 
 internal val TOPIC_GROUPS = listOf(
-    TopicGroup("Feeds", listOf("New", "Hot", "Following", "Polls", "Picks")),
-    TopicGroup("Lifestyle", listOf("Lounge", "Dating", "Ask a millionaire")),
+    TopicGroup("Feeds", listOf("New", "Hot", "Following", "Polls", "Hot polls", "Picks")),
+    TopicGroup("Community", listOf("Lounge", "Serious", "Dating", "Ask a millionaire")),
     TopicGroup("Platform", listOf("Announcements", "Bugs and feedback")),
     TopicGroup("Tech & Finance", listOf("Stocks", "Cryptocurrency", "AI and tech", "Situation monitoring")),
 )

@@ -55,6 +55,9 @@ internal fun ComposePostEditorContent(
     mentionAuth: AuthState?,
     mediaUris: List<String>,
     onRemoveMedia: (Int) -> Unit,
+    onAddMedia: () -> Unit,
+    onAddGif: () -> Unit,
+    canAddMedia: Boolean,
     quotedPost: FeedPost?,
     activeOption: ComposePostOption?,
     pollOptions: List<String>,
@@ -132,12 +135,17 @@ internal fun ComposePostEditorContent(
                     auth = mentionAuth,
                 )
             }
-            ComposeMediaRow(mediaUris = mediaUris, onRemove = onRemoveMedia)
+            if (activeOption != ComposePostOption.Poll) {
+                ComposeMediaRow(mediaUris = mediaUris, onRemove = onRemoveMedia)
+            }
             quotedPost?.let { FeedQuoteCard(it) }
             if (activeOption == ComposePostOption.Poll) {
                 ComposePollCard(
                     options = pollOptions, onChange = onPollOptionsChange, link = pollLink,
                     onLinkChange = onPollLinkChange, onRemove = onRemoveOption,
+                    onAddMedia = onAddMedia, canAddMedia = canAddMedia,
+                    onAddGif = onAddGif,
+                    mediaContent = { ComposeMediaRow(mediaUris = mediaUris, onRemove = onRemoveMedia) },
                 )
             }
             if (activeOption == ComposePostOption.Likert) ComposeLikertCard(onRemove = onRemoveOption)

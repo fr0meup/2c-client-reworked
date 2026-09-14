@@ -159,6 +159,8 @@ data class NotificationNavigationRequest(
     val commentUuid: String? = null,
     val roomUuid: String? = null,
     val messageUuid: String? = null,
+    val userUuid: String? = null,
+    val fromPush: Boolean = false,
 )
 
 object NotificationNavigationBus {
@@ -170,8 +172,10 @@ object NotificationNavigationBus {
         commentUuid: String? = null,
         roomUuid: String? = null,
         messageUuid: String? = null,
+        userUuid: String? = null,
+        fromPush: Boolean = false,
     ) {
-        requestChannel.trySend(NotificationNavigationRequest(postUuid, commentUuid, roomUuid, messageUuid))
+        requestChannel.trySend(NotificationNavigationRequest(postUuid, commentUuid, roomUuid, messageUuid, userUuid, fromPush))
     }
 }
 
@@ -229,6 +233,8 @@ class TwoCentsMessagingService : FirebaseMessagingService() {
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra("open_notifications", true)
+            // Preserve nested metadata as well as the legacy flat destination fields.
+            putExtra("payload", JSONObject(payload.data).toString())
             putExtra("post_uuid", payload.data["post_uuid"] ?: payload.data["postUuid"])
             putExtra("comment_uuid", payload.data["comment_uuid"] ?: payload.data["commentUuid"])
             putExtra("room_uuid", payload.data["room_uuid"] ?: payload.data["roomUuid"])

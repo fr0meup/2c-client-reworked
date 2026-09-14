@@ -471,6 +471,13 @@ fun ComposePostModal(
                         mentionAuth = mentionAuth,
                         mediaUris = mediaUris,
                         onRemoveMedia = { index -> mediaUris = mediaUris.filterIndexed { i, _ -> i != index } },
+                        onAddMedia = { mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+                        canAddMedia = !hasVideoSelection && mediaUris.size < 4,
+                        onAddGif = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            gifPickerOpen = true
+                        },
                         quotedPost = draftQuotedPost,
                         activeOption = activeOption,
                         pollOptions = pollOptions,
@@ -591,7 +598,13 @@ fun ComposePostModal(
             keyboardController?.show()
         },
         onSelectGif = { url ->
-            mediaUris = listOf(url)
+            // GIFs selected from a poll occupy an image slot; do not replace its other attachments.
+            if (activeOption == ComposePostOption.Poll) {
+                if (!hasVideoSelection && mediaUris.size < 4) {
+                    mediaUris = (mediaUris + url).distinct().take(4)
+                    pollLink = ""
+                }
+            } else mediaUris = listOf(url)
             gifPickerOpen = false
             bodyFocusRequester.requestFocus()
             keyboardController?.show()

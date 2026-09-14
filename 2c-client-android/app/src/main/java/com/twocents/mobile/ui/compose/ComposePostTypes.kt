@@ -34,6 +34,7 @@ data class ComposePostDraft(
 
 val ComposeTopics = listOf(
     ComposeTopic("Lounge", "Casual chats & general discussion", ComposeTopicIcon.Chat),
+    ComposeTopic("Serious", "Thoughtful conversations & serious discussion", ComposeTopicIcon.Chat),
     ComposeTopic("Ask a millionaire", "Wealth questions & financial advice", ComposeTopicIcon.Dollar),
     ComposeTopic("Bugs and feedback", "Report issues & platform suggestions", ComposeTopicIcon.Bug),
 )

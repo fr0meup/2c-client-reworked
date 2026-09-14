@@ -64,6 +64,10 @@ fun ComposePollCard(
     link: String,
     onLinkChange: (String) -> Unit,
     onRemove: () -> Unit,
+    onAddMedia: () -> Unit,
+    onAddGif: () -> Unit,
+    canAddMedia: Boolean,
+    mediaContent: @Composable () -> Unit,
 ) {
     var linkExpanded by remember { mutableStateOf(link.isNotBlank()) }
     Column(
@@ -109,32 +113,29 @@ fun ComposePollCard(
                 }
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (options.size < 4) {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Gold.copy(alpha = .08f))
+                        .border(1.dp, Gold.copy(alpha = .22f), RoundedCornerShape(10.dp))
                         .clickable { onChange(options + "") }
-                        .padding(horizontal = 4.dp, vertical = 5.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Icon(Icons.Outlined.Add, null, tint = Gold, modifier = Modifier.size(14.dp))
-                    Text("Add option", color = Gold.copy(alpha = 0.9f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("Add option", color = Gold, fontSize = 13.5.sp, lineHeight = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)))
                 }
             }
-            if (!linkExpanded) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { linkExpanded = true }
-                        .padding(horizontal = 4.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(Icons.Outlined.Add, null, tint = Gold, modifier = Modifier.size(14.dp))
-                    Text("Add a link", color = Gold.copy(alpha = .9f), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
-                }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PollAttachmentButton("Add link", !linkExpanded, { linkExpanded = true }, Modifier.weight(1f))
+                PollAttachmentButton("Add image/video", canAddMedia, onAddMedia, Modifier.weight(1.8f))
+                PollAttachmentButton("Add GIF", canAddMedia, onAddGif, Modifier.weight(1f))
             }
             AnimatedVisibility(
                 visible = linkExpanded,
@@ -163,7 +164,27 @@ fun ComposePollCard(
                     )
                 }
             }
+            // Keep attachment editing inside the poll without creating another media state.
+            mediaContent()
         }
+    }
+}
+
+@Composable
+private fun PollAttachmentButton(label: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val tint = if (enabled) Gold else Color.White.copy(alpha = .3f)
+    Box(
+        modifier.clip(RoundedCornerShape(10.dp))
+            .background(tint.copy(alpha = .08f))
+            .border(1.dp, tint.copy(alpha = .25f), RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = tint, fontSize = 12.5.sp, lineHeight = 18.sp,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            style = TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)),
+            fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
     }
 }
 
@@ -360,6 +381,11 @@ private fun ComposeMediaCard(
         return
     }
     var ratio by remember(uri) { mutableStateOf(16f / 9f) }
+    var previewOpen by remember(uri) { mutableStateOf(false) }
+    // Use the same zoomable viewer for local drafts and remote GIF attachments.
+    if (previewOpen) {
+        com.twocents.mobile.ui.feed.ImageLightbox(listOf(uri), 0, null) { previewOpen = false }
+    }
     Box(
         modifier = modifier
             .aspectRatio(ratio.coerceAtLeast(0.2f))
@@ -377,7 +403,7 @@ private fun ComposeMediaCard(
                     ratio = image.width.toFloat() / image.height.toFloat()
                 }
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().clickable { previewOpen = true },
         )
         Icon(
             Icons.Outlined.Close,

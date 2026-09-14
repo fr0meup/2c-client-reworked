@@ -160,7 +160,7 @@ internal fun ShellExternalNavigationEffects(
     profileCache: ComposeAuthorProfileCache,
     ownProfile: ComposeAuthorProfile?,
     onPrepareRoomNavigation: () -> Unit,
-    onPrepareNotificationNavigation: () -> Unit,
+    onPrepareNotificationNavigation: (Boolean) -> Unit,
     onPrepareProfileNavigation: () -> Unit,
     onSelectTab: (AppTab) -> Unit,
     onOpenRoom: (RoomSummary, String?) -> Unit,
@@ -180,9 +180,18 @@ internal fun ShellExternalNavigationEffects(
     }
     LaunchedEffect(Unit) {
         NotificationNavigationBus.requests.collect { request ->
-            onPrepareNotificationNavigation()
+            onPrepareNotificationNavigation(request.fromPush)
+            // Push destinations are opened above Notifications, not above a stale browsing stack.
+            if (request.fromPush) onSelectTab(AppTab.Notifications)
             when {
+                request.fromPush && request.roomUuid != null -> {
+                    messagesController.resolveRoom(request.roomUuid)?.let { room ->
+                        messagesController.markOpened(room.uuid)
+                        onOpenRoom(room, request.messageUuid)
+                    }
+                }
                 request.roomUuid != null -> RoomNavigationBus.open(request.roomUuid, request.messageUuid)
+                request.postUuid == null && request.userUuid != null -> onPushProfile(request.userUuid, null)
                 request.postUuid == null -> onSelectTab(AppTab.Notifications)
                 else -> {
                     val post = feedController.state.posts.firstOrNull { it.uuid == request.postUuid }

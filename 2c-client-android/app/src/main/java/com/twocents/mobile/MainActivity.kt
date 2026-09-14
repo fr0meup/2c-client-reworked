@@ -26,14 +26,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent?.getBooleanExtra("open_notifications", false) == true) {
-            NotificationNavigationBus.openNotifications(
-                postUuid = intent.getStringExtra("post_uuid"),
-                commentUuid = intent.getStringExtra("comment_uuid"),
-                roomUuid = intent.getStringExtra("room_uuid"),
-                messageUuid = intent.getStringExtra("message_uuid"),
-            )
-        }
+        if (savedInstanceState == null) intent?.let { com.twocents.mobile.notifications.handlePushNavigation(it) }
         intent?.dataString?.let(AppLinkRouter::open)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
@@ -75,14 +68,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra("open_notifications", false)) {
-            NotificationNavigationBus.openNotifications(
-                postUuid = intent.getStringExtra("post_uuid"),
-                commentUuid = intent.getStringExtra("comment_uuid"),
-                roomUuid = intent.getStringExtra("room_uuid"),
-                messageUuid = intent.getStringExtra("message_uuid"),
-            )
-        }
+        com.twocents.mobile.notifications.handlePushNavigation(intent)
         intent.dataString?.let(AppLinkRouter::open)
     }
 }

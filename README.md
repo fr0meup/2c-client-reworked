@@ -12,7 +12,7 @@ The goal is a more polished Android experience: lightweight, fast, data-consciou
 
 ## Current status
 
-Latest Android release: **v0.2.4**. See the [release notes](https://github.com/fr0meup/2c-client-reworked/releases/tag/v0.2.4) for details.
+Latest Android release: **v0.2.5**. See the [release notes](https://github.com/fr0meup/2c-client-reworked/releases/tag/v0.2.5) for details.
 
 The Android client supports the functionality of the official twocents application with the current exceptions of creating transactions and budgets. Those features are not currently available to the developer in the EU, which means their behavior and API contracts cannot yet be tested or implemented reliably. They will be added as soon as access makes a correct implementation possible.
 
@@ -42,7 +42,8 @@ Do not uninstall the app when updating unless the release notes explicitly requi
 
 ## Main features
 
-- Feeds and topics, including new, hot, following, polls, picks, and topic feeds.
+- Feeds and topics, including new, hot, following, polls, hot polls, picks, and topic feeds such as Serious in Community.
+- Poll creation with integrated image, video, and saved-GIF attachments, plus zoomable image previews before publishing.
 - Posts, nested comments, replies, quoting, voting, bookmarks, polls, Likert posts, links, images, GIFs, and video.
 - Profiles, aliases, following, user activity, net-worth history, and leaderboards.
 - Notifications with direct navigation to the relevant post, comment, profile, room, or message.

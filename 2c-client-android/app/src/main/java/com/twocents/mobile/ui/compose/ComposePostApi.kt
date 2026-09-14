@@ -132,9 +132,16 @@ private suspend fun uploadComposeMedia(
     if (mediaUris.isEmpty()) return emptyList()
     val resolver = context.contentResolver
     val remote = mediaUris.filter { it.startsWith("http://") || it.startsWith("https://") }
-    require(remote.size <= 1) { "Only one saved GIF can be attached" }
+    if (remote.isNotEmpty() && mediaUris.size > 1) {
+        require(mediaUris.size <= 4) { "Only four images can be attached" }
+        require(mediaUris.filterNot { it in remote }.all {
+            resolver.getType(Uri.parse(it))?.startsWith("image/") == true
+        }) { "Video and images cannot be attached together" }
+        // Upload one attachment at a time: mixed local images/saved GIFs retain order
+        // without holding several downloaded animations in memory simultaneously.
+        return mediaUris.flatMap { uploadComposeMedia(api, auth, context, listOf(it)) }
+    }
     if (remote.isNotEmpty()) {
-        require(mediaUris.size == 1) { "A saved GIF cannot be combined with other media" }
         val (contentType, bytes) = api.downloadBinary(remote.single())
         val result = api.call(
             method = "/v1/media/uploadImage",

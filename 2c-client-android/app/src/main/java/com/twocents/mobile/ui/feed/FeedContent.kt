@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -90,9 +91,12 @@ fun FeedContent(
     val verifiedOnly = VerifiedContentFilterStore.isEnabled(context, authUuid)
     // Filter only the outer post. Embedded quote authors remain visible, and
     // bookmarks intentionally preserve the user's explicitly saved content.
-    val visiblePosts = remember(state.posts, verifiedOnly, controller.source) {
-        if (!verifiedOnly || controller.source == FeedSource.Bookmarks) state.posts
-        else state.posts.filter(VerifiedContentFilterStore::allows)
+    val visiblePosts by remember(controller, verifiedOnly) {
+        derivedStateOf {
+            val posts = controller.state.posts
+            if (!verifiedOnly || controller.source == FeedSource.Bookmarks) posts
+            else posts.filter(VerifiedContentFilterStore::allows)
+        }
     }
 
     LaunchedEffect(controller, topic, searchQuery, advancedFilters) {
@@ -105,13 +109,18 @@ fun FeedContent(
     }
     LaunchedEffect(controller) { controller.ensureAliases() }
 
-    LaunchedEffect(controller, topic, searchQuery, advancedFilters, listState) {
+    val leadingRows = if (advancedHeaderContent != null) 1 else 0
+    LaunchedEffect(controller, topic, searchQuery, advancedFilters, listState, verifiedOnly, leadingRows) {
         snapshotFlow {
             val snapshot = controller.state
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            val shouldLoad = snapshot.hasMore && !snapshot.isLoadingMore && snapshot.posts.isNotEmpty() &&
-                lastVisible >= snapshot.posts.lastIndex - 4
-            (shouldLoad && advancedFilters == null) to snapshot.posts.size
+            // LazyColumn indexes describe filtered rows, not all fetched posts.
+            // Empty filtered pages must advance too. Observe the cursor so even
+            // pages containing only hidden/duplicate posts trigger the next check.
+            val shouldLoad = snapshot.hasMore && !snapshot.isInitialLoading &&
+                !snapshot.isLoadingMore && !snapshot.nextCursor.isNullOrBlank() &&
+                (visiblePosts.isEmpty() || lastVisible - leadingRows >= visiblePosts.lastIndex - 4)
+            (shouldLoad && advancedFilters == null) to snapshot.nextCursor
         }
             .distinctUntilChanged()
             .collect { (shouldLoadMore, _) ->
@@ -157,7 +166,7 @@ fun FeedContent(
                     }
                 }
             }
-            if (visiblePosts.isEmpty() && state.posts.isNotEmpty()) {
+            if (visiblePosts.isEmpty() && state.posts.isNotEmpty() && (advancedFilters != null || !state.hasMore)) {
                 item(key = "verified-filter-empty", contentType = "empty") {
                     AppLoadState("No verified posts here", "Turn off Verified accounts only to show the hidden posts.", Modifier.fillMaxWidth().height(260.dp))
                 }
@@ -185,9 +194,7 @@ fun FeedContent(
                     parentScrolling = { listState.isScrollInProgress },
                 )
             }
-            if (visiblePosts.isEmpty()) {
-                item(key = "advanced-scroll-space", contentType = "footer") { Spacer(Modifier.height(80.dp)) }
-            } else if (state.isLoadingMore) {
+            if (state.isLoadingMore) {
                 item(key = "feed-loading-more", contentType = "footer") {
                     Box(
                         modifier = Modifier
@@ -198,6 +205,8 @@ fun FeedContent(
                         FeedPaginationSpinner()
                     }
                 }
+            } else if (visiblePosts.isEmpty()) {
+                item(key = "advanced-scroll-space", contentType = "footer") { Spacer(Modifier.height(80.dp)) }
             } else if (!state.hasMore) {
                 item(key = "feed-end", contentType = "footer") {
                     Box(

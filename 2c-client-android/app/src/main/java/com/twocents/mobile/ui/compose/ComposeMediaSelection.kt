@@ -22,10 +22,8 @@ internal fun resolveComposeMediaSelection(
     }
     if (selected.isEmpty()) return null
     val selectedVideos = selected.filter { context.contentResolver.getType(it)?.startsWith("video/") == true }
-    val resolved = if (activeOption == ComposePostOption.Poll) {
-        selected.filter { context.contentResolver.getType(it)?.startsWith("image/") == true }
-            .map(Uri::toString).distinct().take(4)
-    } else if (selectedVideos.isNotEmpty()) {
+    // Polls share the same attachment limits and additive image selection as ordinary posts.
+    val resolved = if (selectedVideos.isNotEmpty()) {
         listOf(selectedVideos.first().toString())
     } else {
         val existingImages = currentUris.filter { raw ->

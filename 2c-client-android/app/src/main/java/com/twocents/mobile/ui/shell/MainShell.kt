@@ -180,9 +180,15 @@ fun MainShell(
             profileRequested = false
             openedPost = null
         },
-        onPrepareNotificationNavigation = {
+        onPrepareNotificationNavigation = { fromPush ->
             topicDropdownOpen = false
             profileRequested = false
+            if (fromPush) {
+                overlayStack = emptyList()
+                openedPost = null
+                openedRoom = null
+                accountSidebarOpen = false
+            }
         },
         onPrepareProfileNavigation = { topicDropdownOpen = false },
         onSelectTab = { selectedTab = it },

@@ -156,6 +156,7 @@ internal fun topicToApi(topic: String): String? = when (topic) {
     "Hot" -> "hot"
     "Following" -> "following"
     "Polls" -> "new-polls"
+    "Hot polls" -> "hot-polls"
     "Picks" -> "picks"
     "Bugs and feedback" -> "bugs-and-feedback"
     "Business and entrepreneurship" -> "business-entrepreneurship"
