@@ -15,7 +15,6 @@ import com.twocents.mobile.RpcApi
 import com.twocents.mobile.notifications.NotificationController
 import com.twocents.mobile.ui.compose.createComposePost
 import com.twocents.mobile.ui.compose.launchPostPublishFollowUp
-import com.twocents.mobile.ui.common.notifyMentions
 import com.twocents.mobile.ui.common.AppToast
 import com.twocents.mobile.ui.feed.FeedController
 import com.twocents.mobile.ui.feed.loadFeedPost
@@ -135,9 +134,7 @@ internal fun BoxScope.MainShellLayerHost(
                 // The create response is the publication boundary. Notifications,
                 // refreshes and UI frame work cannot change that success to false.
                 val background = com.twocents.mobile.ui.common.AppBackgroundTasks.mutations
-                background.launchPostPublishFollowUp("Post published, but mentions couldn't be sent") {
-                    notifyMentions(api, auth, draft.body, postedPost.uuid, contentType = "post")
-                }
+                // Official mention notifications are produced by the create endpoint, not synthetic DMs.
                 background.launchPostPublishFollowUp("Post published, but your profile couldn't refresh") {
                     refreshOwnProfile()
                 }

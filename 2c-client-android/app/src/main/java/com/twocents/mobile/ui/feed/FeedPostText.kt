@@ -107,6 +107,15 @@ internal fun FeedPostText(
         while (index < lines.size) {
             val line = lines[index]
             when {
+                Regex("^#{1,6}\\s+").containsMatchIn(line) -> {
+                    if (pendingBlankLines > 0) Spacer(Modifier.height(paragraphGap))
+                    val level = line.takeWhile { it == '#' }.length
+                    val size = ((if (compact) 23 else 27) - (level - 1) * 2).sp
+                    MarkdownLine(markdownInline("**${line.drop(level).trimStart()}**"), bodyColor,
+                        size, size * 1.2f, maxLines = maxLines)
+                    pendingBlankLines = 0
+                    index++
+                }
                 line.startsWith(">") || line.startsWith("│") -> {
                     val quoteLines = mutableListOf<String>()
                     while (index < lines.size && (lines[index].startsWith(">") || lines[index].startsWith("│"))) {
@@ -189,6 +198,10 @@ internal fun FeedPostText(
 @Composable
 internal fun CommentBodyText(text: String, modifier: Modifier = Modifier) {
     if (text.isBlank()) return
+    if (Regex("(?m)^#{1,6}\\s+").containsMatchIn(text)) {
+        FeedPostText(text, modifier, compact = true)
+        return
+    }
     LinkifiedText(
         text = text,
         color = Color.White.copy(alpha = .9f),
@@ -232,7 +245,9 @@ private fun markdownInline(raw: String): AnnotatedString = buildAnnotatedString 
                 val label = match.groups[2]?.value ?: token
                 val url = match.groups[3]?.value
                 val start = length
-                pushStyle(SpanStyle(color = Color(0xFFC8A44D), textDecoration = TextDecoration.Underline))
+                pushStyle(if (url?.startsWith("/user/") == true)
+                    SpanStyle(color = Color(0xFFC8A44D), fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.None)
+                else SpanStyle(color = Color(0xFFC8A44D), textDecoration = TextDecoration.Underline))
                 append(label)
                 pop()
                 if (url != null) addStringAnnotation("URL", url, start, length)
@@ -301,7 +316,11 @@ private fun MarkdownLine(
             style = style,
             onClick = { offset ->
                 text.getStringAnnotations("URL", offset, offset).firstOrNull()?.item?.let { raw ->
-                    val normalized = if (raw.startsWith("www.", true)) "https://$raw" else raw
+                    val normalized = when {
+                        raw.startsWith("/user/") -> "https://www.twocents.com$raw"
+                        raw.startsWith("www.", true) -> "https://$raw"
+                        else -> raw
+                    }
                     if (!AppLinkRouter.open(normalized)) runCatching { uriHandler.openUri(normalized) }
                 }
             },

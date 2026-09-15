@@ -144,6 +144,8 @@ internal fun ActiveFeedVideoPlayer(
     var pausedForDetailOverlay by remember(safeUri) { mutableStateOf(false) }
     var isPlaying by remember(safeUri) { mutableStateOf(false) }
     var isBuffering by remember(safeUri) { mutableStateOf(false) }
+    var softwarePlayback by remember(safeUri) { mutableStateOf(false) }
+    var softwareAutoPlay by remember(safeUri) { mutableStateOf(false) }
     var playbackError by remember(safeUri) { mutableStateOf<String?>(null) }
     var controlsVisible by remember(safeUri) { mutableStateOf(true) }
     var thumbnailVisible by remember(safeUri) { mutableStateOf(true) }
@@ -163,9 +165,21 @@ internal fun ActiveFeedVideoPlayer(
             preview.ratio?.let { videoRatio = it }
         }
     }
+    val decoderRecovery = remember(safeUri, lifecycleOwner) { VideoDecoderRecovery() }
     val player = remember(safeUri, lifecycleOwner) {
-        ExoPlayer.Builder(context.applicationContext).build().apply {
-            setMediaItem(MediaItem.fromUri(safeUri))
+        ExoPlayer.Builder(context.applicationContext,
+            androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+                .setMediaCodecSelector(decoderRecovery.selector)
+                .setEnableDecoderFallback(true))
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                context.applicationContext, CompatibleVideoExtractors(context.applicationContext)))
+            .build().apply {
+            val item = MediaItem.Builder().setUri(safeUri)
+            // MOV and MP4 share the ISO-BMFF extractor; do not trust QuickTime HTTP labels.
+            if (Uri.parse(safeUri).path?.endsWith(".mov", ignoreCase = true) == true) {
+                item.setMimeType(androidx.media3.common.MimeTypes.VIDEO_MP4)
+            }
+            setMediaItem(item.build())
             repeatMode = Player.REPEAT_MODE_OFF
             playWhenReady = false
             prepare()
@@ -175,7 +189,26 @@ internal fun ActiveFeedVideoPlayer(
     DisposableEffect(player, lifecycleOwner) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                playbackError = "Couldn't load this video. Check your connection or try again. It may no longer be available."
+                android.util.Log.w("2cVideo", "Playback failed: ${error.errorCodeName}", error)
+                if (decoderRecovery.canRetry(error)) {
+                    val resumeAt = player.currentPosition.coerceAtLeast(0L)
+                    player.stop()
+                    player.seekTo(resumeAt)
+                    playbackError = null
+                    player.prepare()
+                    return
+                }
+                if (error.errorCode in 4001..4005 &&
+                    (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat?.sampleMimeType
+                        ?.startsWith("video/") == true) {
+                    softwareAutoPlay = player.playWhenReady
+                    player.stop()
+                    softwarePlayback = true
+                    return
+                }
+                playbackError = if (error.errorCode in 4001..4005) {
+                    "This device couldn't decode this video format. Try opening the original video on another device."
+                } else "Couldn't load this video. Check your connection or try again. It may no longer be available."
                 isBuffering = false
                 controlsVisible = true
             }
@@ -348,6 +381,11 @@ internal fun ActiveFeedVideoPlayer(
             handoff.resumePlaying = true
             player.play()
         }
+    }
+
+    if (softwarePlayback) {
+        SoftwareFeedVideoPlayer(safeUri, player, modifier, compact, videoRatio, softwareAutoPlay, handoffOnMount, onLeaveViewport)
+        return
     }
 
     if (!fullscreen) {

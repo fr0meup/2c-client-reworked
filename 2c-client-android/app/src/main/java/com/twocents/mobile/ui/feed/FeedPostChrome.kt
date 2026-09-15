@@ -243,6 +243,7 @@ internal fun UserMetaPill(
     elo: Int? = null,
     joined: String? = null,
     joinedExact: String? = null,
+    leadingContent: (@Composable () -> Unit)? = null,
 ) {
     val hasAlias = !alias.isNullOrBlank() && !alias.equals("null", ignoreCase = true)
     val hasGender = !user.gender.isNullOrBlank()
@@ -251,7 +252,7 @@ internal fun UserMetaPill(
     val hasElo = elo != null && elo > 0
     val hasJoined = !joined.isNullOrBlank()
     var joinedExpanded by remember(joinedExact) { mutableStateOf(false) }
-    if (!hasAlias && !hasGender && !hasAge && !hasArena && !hasElo && !hasJoined) {
+    if (!hasAlias && !hasGender && !hasAge && !hasArena && !hasElo && !hasJoined && leadingContent == null) {
         Spacer(modifier)
         return
     }
@@ -273,6 +274,12 @@ internal fun UserMetaPill(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             var hasPrevious = false
+            // Optional slot is used only by comments; other pills are unchanged.
+            if (leadingContent != null) {
+                leadingContent()
+                Spacer(Modifier.width(5.dp))
+                hasPrevious = false
+            }
             if (hasElo) {
                 val eloColor = when {
                     elo >= 1700 -> Color(0xFFDAB232)

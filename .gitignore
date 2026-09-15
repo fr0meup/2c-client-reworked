@@ -1,6 +1,11 @@
 # Web client stays local until ready for publication
 /2c-client-web/
 
+# Web dependencies and generated SvelteKit output
+/2c-client-web/node_modules/
+/2c-client-web/.svelte-kit/
+/2c-client-web/build/
+
 # Gradle and Kotlin build state
 .gradle/
 .kotlin/

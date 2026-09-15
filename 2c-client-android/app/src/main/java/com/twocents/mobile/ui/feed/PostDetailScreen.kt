@@ -37,7 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -188,7 +188,7 @@ internal fun PostDetailScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Box(Modifier.width(32.dp).height(28.dp).clickable(onClick = onBack), contentAlignment = Alignment.CenterStart) {
-                Icon(Icons.Outlined.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
             }
             Text(
                 "slop",
@@ -291,6 +291,7 @@ internal fun PostDetailScreen(
                             onVote = { direction -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.toggleCommentVote(row.comment.uuid, direction) } },
                             highlighted = row.comment.uuid == highlightedCommentUuid,
                             ownComment = row.comment.authorUuid == auth.userUuid,
+                            isOriginalPoster = row.comment.authorUuid == state.post?.authorUuid,
                             onDelete = { com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.deleteComment(row.comment.uuid) } },
                         )
                     }

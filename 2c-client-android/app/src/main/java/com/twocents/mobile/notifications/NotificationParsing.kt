@@ -52,7 +52,8 @@ internal fun normalizeNotification(
         createdAt = source.firstString("created_at", "createdAt") ?: java.time.Instant.now().toString(),
         userUuid = source.firstString("user_uuid", "userUuid") ?: "",
         type = normalizeType(source.firstString("type", "notification_type") ?: fallbackType),
-        message = source.firstString("message", "body") ?: fallbackMessage.orEmpty(),
+        message = com.twocents.mobile.ui.common.renderOfficialMentions(
+            source.firstString("message", "body") ?: fallbackMessage.orEmpty(), metaObject.optJSONArray("mentions")),
         readAt = source.firstString("read_at", "readAt"),
         meta = meta,
     )
@@ -97,6 +98,7 @@ private val NOTIFICATION_TYPES = setOf(
     "poll_voted",
     "followed",
     "followed_by",
+    "user_mentioned",
     "generic",
     "balance_updated",
 )

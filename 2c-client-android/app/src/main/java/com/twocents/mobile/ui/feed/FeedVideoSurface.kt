@@ -124,7 +124,7 @@ private val MediaBackground = Color(0xFF0A0907)
 @Composable
 internal fun FeedVideoSurface(
     videoUri: String,
-    player: ExoPlayer,
+    player: ExoPlayer?,
     thumbnailModel: Any?,
     isPlaying: Boolean,
     isBuffering: Boolean,
@@ -145,6 +145,7 @@ internal fun FeedVideoSurface(
     modifier: Modifier,
     errorMessage: String? = null,
     onRetry: () -> Unit = {},
+    videoContent: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -176,10 +177,13 @@ internal fun FeedVideoSurface(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .background(MediaBackground),
     ) {
+        // Adapt chrome to the video, never pad/crop the video to fit the chrome.
+        val shortVideo = !fullscreen && maxHeight < 150.dp
+        val initialShortPlay = shortVideo && thumbnailVisible && !isPlaying
         if (thumbnailVisible && thumbnailModel != null) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
@@ -190,7 +194,7 @@ internal fun FeedVideoSurface(
                 modifier = Modifier.fillMaxSize().background(MediaBackground),
             )
         }
-        AndroidView(
+        if (videoContent != null) videoContent() else AndroidView(
             factory = { viewContext ->
                 (LayoutInflater.from(viewContext).inflate(R.layout.feed_video_player, null, false) as PlayerView).apply {
                     this.player = player
@@ -217,7 +221,7 @@ internal fun FeedVideoSurface(
                 if (fullscreen) Text("Close fullscreen", color = Color.White,
                     modifier = Modifier.clickable(onClick = onToggleFullscreen).padding(8.dp))
             }
-            return@Box
+            return@BoxWithConstraints
         }
         Box(
             modifier = Modifier
@@ -232,12 +236,12 @@ internal fun FeedVideoSurface(
 
         if (isBuffering) {
             CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center).offset(y = (-22).dp).size(28.dp),
+                modifier = Modifier.align(Alignment.Center).offset(y = if (shortVideo) 0.dp else (-22).dp).size(28.dp),
                 color = Color(0xFFC8A44D),
                 trackColor = Color.White.copy(alpha = .10f),
                 strokeWidth = 2.5.dp,
             )
-        } else if (!isPlaying || controlsVisible) {
+        } else if ((!shortVideo && (!isPlaying || controlsVisible)) || initialShortPlay) {
             val playInteraction = remember { MutableInteractionSource() }
             val playPressed by playInteraction.collectIsPressedAsState()
             Box(
@@ -245,8 +249,8 @@ internal fun FeedVideoSurface(
                     .align(Alignment.Center)
                     // The transport center is the area above the progress strip,
                     // not the geometric center of the complete player chrome.
-                    .offset(y = (-22).dp)
-                    .size(52.dp)
+                    .offset(y = if (shortVideo) 0.dp else (-22).dp)
+                    .size(if (shortVideo) 36.dp else 52.dp)
                     .clip(CircleShape)
                     .background(Color(0xFF11100D).copy(alpha = if (playPressed) 0.90f else 0.76f))
                     .border(1.dp, Color.White.copy(alpha = if (playPressed) .22f else .14f), CircleShape)
@@ -267,7 +271,7 @@ internal fun FeedVideoSurface(
         }
 
         AnimatedVisibility(
-            visible = controlsVisible || !isPlaying,
+            visible = (controlsVisible || !isPlaying) && !initialShortPlay,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -280,7 +284,7 @@ internal fun FeedVideoSurface(
                             colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f)),
                         ),
                     )
-                    .padding(start = 12.dp, end = 12.dp, top = 46.dp, bottom = 8.dp),
+                    .padding(start = 8.dp, end = 8.dp, top = if (shortVideo) 0.dp else 46.dp, bottom = if (shortVideo) 0.dp else 8.dp),
             ) {
                 FeedVideoProgress(
                     positionMs = positionMs,
@@ -297,7 +301,7 @@ internal fun FeedVideoSurface(
                         description = if (isPlaying) "Pause video" else "Play video",
                         onClick = onTogglePlayback,
                     )
-                    VideoControlButton(
+                    if (!shortVideo) VideoControlButton(
                         icon = Icons.Rounded.FastRewind,
                         description = "Rewind 10 seconds",
                         onClick = { onSeek((positionMs - 10_000L).coerceAtLeast(0L)) },
@@ -316,7 +320,7 @@ internal fun FeedVideoSurface(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(CircleShape).clickable(onClick = onCycleSpeed).padding(horizontal = 8.dp, vertical = 7.dp),
                     )
-                    VideoControlButton(
+                    if (!shortVideo) VideoControlButton(
                         icon = Icons.Rounded.FastForward,
                         description = "Forward 10 seconds",
                         onClick = { onSeek((positionMs + 10_000L).coerceAtMost(durationMs.coerceAtLeast(0L))) },

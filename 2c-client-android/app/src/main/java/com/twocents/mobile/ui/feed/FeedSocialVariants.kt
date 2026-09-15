@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -87,7 +87,7 @@ internal fun FeedPicksCard(
 }
 
 @Composable
-internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, controller: FeedController? = null, authUuid: String? = null) {
+internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, controller: FeedController? = null, authUuid: String? = null, showUserMeta: Boolean = false) {
     val scope = rememberCoroutineScope()
     var loadedPollVote by remember(quote.uuid, controller) { mutableStateOf<Int?>(null) }
     // A parent-feed response contains votes for outer posts and can replace
@@ -111,7 +111,8 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, contr
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp)
+            .padding(top = if (com.twocents.mobile.ui.common.LocalBalancedEmbedSpacing.current) 6.dp else 10.dp,
+                bottom = if (com.twocents.mobile.ui.common.LocalBalancedEmbedSpacing.current) 6.dp else 0.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(CardSurface)
             .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
@@ -158,6 +159,7 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, contr
         } else if (quote.meta.images.isNotEmpty()) {
             FeedPostMedia(quote.meta.images, compact = true)
         }
+        if (showUserMeta) FeedUserMetaPill(quote, quote.author.alias, Modifier.fillMaxWidth().padding(top = 8.dp), compact = true)
     }
 }
 
@@ -168,7 +170,7 @@ internal fun FeedLinkCard(url: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp)
+            .padding(top = if (com.twocents.mobile.ui.common.LocalBalancedEmbedSpacing.current) 6.dp else 10.dp, bottom = if (com.twocents.mobile.ui.common.LocalBalancedEmbedSpacing.current) 6.dp else 0.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(CardSurface)
             .border(1.dp, CardBorder, RoundedCornerShape(12.dp))
@@ -186,6 +188,6 @@ internal fun FeedLinkCard(url: String) {
             Text(host, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text(url, color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Icon(Icons.Outlined.OpenInNew, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
+        Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
     }
 }

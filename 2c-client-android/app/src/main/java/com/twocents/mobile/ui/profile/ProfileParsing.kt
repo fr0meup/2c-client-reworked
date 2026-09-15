@@ -102,7 +102,7 @@ internal fun parseProfile(root: JSONObject): ProfileState {
         val authorMeta = item.optJSONObject("author_meta")
         val commentMeta = item.optJSONObject("comment_meta")
         val postUuid = item.optString("post_uuid")
-        val text = item.optString("text")
+        val text = com.twocents.mobile.ui.common.renderOfficialMentions(item.optString("text"), commentMeta?.optJSONArray("mentions"))
         val media = buildList {
             listOf("giphy_url", "image_url", "imageUrl", "src").forEach { key -> commentMeta?.nullableString(key)?.let { add(normalizeMediaUrl(it)) } }
             profileMediaUrl.findAll(text).map { normalizeMediaUrl(it.value.trimEnd('.', ',', ')')) }.forEach(::add)
@@ -179,4 +179,3 @@ internal fun formatNumber(value: Double) = java.text.NumberFormat.getNumberInsta
 private fun JSONArray?.objects(): List<JSONObject> = if (this == null) emptyList() else buildList { for (index in 0 until length()) optJSONObject(index)?.let(::add) }
 private fun JSONObject.nullableString(key: String): String? = if (!has(key) || isNull(key)) null else optString(key).takeIf(String::isNotBlank)
 private fun JSONObject.nullableInt(key: String): Int? = if (!has(key) || isNull(key)) null else optInt(key)
-

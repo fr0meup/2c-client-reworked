@@ -40,7 +40,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -116,7 +116,8 @@ internal fun CommentComposer(
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
-    var text by remember { mutableStateOf("") }
+    var editor by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+    val text = editor.text
     var imageUri by remember { mutableStateOf<String?>(null) }
     var imagePreviewOpen by remember { mutableStateOf(false) }
     var gifPickerOpen by remember { mutableStateOf(false) }
@@ -217,7 +218,7 @@ internal fun CommentComposer(
                 )
             }
         }
-        val activeMention = mentionContext(text)
+        val activeMention = mentionContext(text, editor.selection.end)
         MentionSuggestions(
             context = activeMention,
             aliases = aliases,
@@ -225,8 +226,10 @@ internal fun CommentComposer(
             onDismiss = {},
             onSelect = { uuid, alias ->
                 activeMention?.let {
-                    val candidate = text.replaceRange(it.start, text.length, mentionMarkup(alias, uuid))
-                    if (candidate.length <= 1_000) text = candidate
+                    val markup = mentionMarkup(alias, uuid)
+                    val candidate = text.replaceRange(it.start, editor.selection.end, markup)
+                    if (candidate.length <= 1_000) editor = androidx.compose.ui.text.input.TextFieldValue(
+                        candidate, androidx.compose.ui.text.TextRange(it.start + markup.length))
                 }
                 focusRequester.requestFocus()
             },
@@ -247,8 +250,8 @@ internal fun CommentComposer(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             BasicTextField(
-                value = text,
-                onValueChange = { text = it.take(1_000) },
+                value = editor,
+                onValueChange = { if (it.text.length <= 1_000) editor = it },
                 textStyle = TextStyle(
                     color = Color.White,
                     fontSize = 13.5.sp,
@@ -289,7 +292,7 @@ internal fun CommentComposer(
                         val submittedReply = replyTarget?.uuid
                         com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
                             if (controller.createComment(submittedText, submittedReply, submittedImage, context.applicationContext)) {
-                                if (text == submittedText) text = ""
+                                if (editor.text == submittedText) editor = androidx.compose.ui.text.input.TextFieldValue("")
                                 if (imageUri == submittedImage) imageUri = null
                                 scope.launch { if (replyTarget?.uuid == submittedReply) onCancelReply() }
                             }
@@ -305,7 +308,7 @@ internal fun CommentComposer(
                     if (state.submitting) {
                         CircularProgressIndicator(Modifier.size(14.dp), color = Color(0xFF0F0E0A), strokeWidth = 1.8.dp)
                     } else {
-                        Icon(Icons.Rounded.Send, "Send", tint = Color(0xFF0F0E0A), modifier = Modifier.size(14.dp))
+                        Icon(Icons.AutoMirrored.Rounded.Send, "Send", tint = Color(0xFF0F0E0A), modifier = Modifier.size(14.dp))
                     }
                 }
             }

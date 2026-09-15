@@ -37,7 +37,7 @@ fun LinkifiedText(
     onTextClick: (() -> Unit)? = null,
 ) {
     val uriHandler = LocalUriHandler.current
-    val annotated = remember(text, linkColor) { linkify(text, linkColor) }
+    val annotated = remember(text, linkColor) { linkify(renderOfficialMentions(text, null), linkColor) }
     val style = TextStyle(
         color = color,
         fontSize = fontSize,

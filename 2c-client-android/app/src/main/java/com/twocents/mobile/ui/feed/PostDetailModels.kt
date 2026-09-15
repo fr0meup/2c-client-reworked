@@ -14,6 +14,8 @@ internal data class PostComment(
     val upvoteCount: Int,
     val deleted: Boolean,
     val mediaUrls: List<String>,
+    val pollUserVote: Int? = null,
+    val pickUserVote: String? = null,
 )
 
 internal enum class CommentSort(val label: String) {

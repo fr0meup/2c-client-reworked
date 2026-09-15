@@ -230,7 +230,7 @@ internal fun ActivityRow(label: String, today: Int, week: Int, modifier: Modifie
 }
 
 internal fun sidebarActivityPreview(raw: String, meta: JSONObject?, postType: Int = 0): String {
-    val visible = prepareCommentText(raw)
+    val visible = prepareCommentText(com.twocents.mobile.ui.common.renderOfficialMentions(raw, meta?.optJSONArray("mentions")))
         .replace(Regex("\\[(@[^]]+)]\\s*\\(/user/[0-9a-fA-F-]{32,36}\\)"), "$1")
         .replace(Regex("https?://\\S+?\\.(?:mp4|mov|webm|m4v|gifv)(?:[?#]\\S*)?", RegexOption.IGNORE_CASE), "")
         .replace(Regex("[\\u2800\\u3000\\u3164]"), " ")

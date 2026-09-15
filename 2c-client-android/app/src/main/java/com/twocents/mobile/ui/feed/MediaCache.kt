@@ -45,6 +45,18 @@ internal object VideoPreviewRepository {
 
     fun peek(uri: String): CachedVideoPreview? = memory[uri]?.takeIf { it.file.isFile }
 
+    suspend fun saveFrame(context: Context, uri: String, frame: Bitmap, ratio: Float) = withContext(Dispatchers.IO) {
+        val directory = File(context.cacheDir, "video-previews").apply { mkdirs() }
+        val key = MessageDigest.getInstance("SHA-256").digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }
+        val image = File(directory, "$key.jpg")
+        image.outputStream().buffered().use { frame.compress(Bitmap.CompressFormat.JPEG, 86, it) }
+        File(directory, "$key.ratio").writeText(ratio.toString())
+        cacheMediaRatio(uri, ratio)
+        memory[uri] = CachedVideoPreview(image, ratio)
+        retryAfter.remove(uri)
+        frame.recycle()
+    }
+
     suspend fun prepare(context: Context, uri: String): CachedVideoPreview? = withContext(Dispatchers.IO) {
         peek(uri)?.let { return@withContext it }
         if ((retryAfter[uri] ?: 0L) > System.currentTimeMillis()) return@withContext null
@@ -81,6 +93,7 @@ internal object VideoPreviewRepository {
                         val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
                         val rawRatio = if (width != null && height != null && height > 0f) width / height else null
                         val ratio = rawRatio?.let { if (rotation == 90 || rotation == 270) 1f / it else it }
+                        ratio?.let { cacheMediaRatio(uri, it) }
                         val frame = retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return@runCatching null
                         image.outputStream().buffered().use { frame.compress(Bitmap.CompressFormat.JPEG, 86, it) }
                         ratio?.let { ratioFile.writeText(it.toString()); cacheMediaRatio(uri, it) }

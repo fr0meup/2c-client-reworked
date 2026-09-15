@@ -50,11 +50,15 @@ fun TwoCentsApp(
                 authStore = authStore,
                 onAuthenticated = { auth = it },
             )
-            else -> MainShell(
+            else -> androidx.compose.runtime.CompositionLocalProvider(
+                com.twocents.mobile.ui.common.LocalContentEmbeds provides remember(auth, rpcApi) {
+                    com.twocents.mobile.ui.common.NativeContentRepository(rpcApi, auth!!)
+                },
+            ) { MainShell(
                 auth = auth!!,
                 rpcApi = rpcApi,
                 onLogout = { scope.launch { authStore.clear(); auth = null } },
-            )
+            ) }
         }
         AppToastHost(Modifier.align(Alignment.TopCenter))
         com.twocents.mobile.ui.common.RateLimitBanner()

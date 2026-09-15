@@ -61,7 +61,7 @@ data class AppNotification(
             .firstNotNullOfOrNull { meta[it]?.takeIf(String::isNotBlank) }
     val actorUuid: String?
         get() = listOf(
-            "voter_uuid", "follower_uuid", "replier_uuid", "actor_uuid", "author_uuid", "user_uuid",
+            "mentioner_uuid", "mentionerUuid", "voter_uuid", "follower_uuid", "replier_uuid", "actor_uuid", "author_uuid", "user_uuid",
             "from_user_uuid", "sender_uuid", "comment_author_uuid", "post_author_uuid",
             "voterUuid", "followerUuid", "replierUuid", "actorUuid", "authorUuid", "fromUserUuid",
         ).firstNotNullOfOrNull { key ->
@@ -70,12 +70,12 @@ data class AppNotification(
         }
     val actorBalance: Double?
         get() = listOf(
-            "actor_balance", "replier_balance", "voter_balance", "follower_balance", "author_balance",
+            "mentioner_balance", "mentionerBalance", "actor_balance", "replier_balance", "voter_balance", "follower_balance", "author_balance",
             "sender_balance", "from_user_balance", "balance", "networth", "net_worth",
             "actorBalance", "replierBalance", "voterBalance", "followerBalance",
         ).firstNotNullOfOrNull { meta[it]?.toDoubleOrNull() }
     val actorSubscriptionType: Int
-        get() = listOf("actor_subscription_type", "replier_subscription_type", "follower_subscription_type", "subscription_type", "subscriptionType").firstNotNullOfOrNull { meta[it]?.toIntOrNull() } ?: 0
+        get() = listOf("mentioner_subscription_type", "mentionerSubscriptionType", "actor_subscription_type", "replier_subscription_type", "follower_subscription_type", "subscription_type", "subscriptionType").firstNotNullOfOrNull { meta[it]?.toIntOrNull() } ?: 0
 }
 
 @Immutable

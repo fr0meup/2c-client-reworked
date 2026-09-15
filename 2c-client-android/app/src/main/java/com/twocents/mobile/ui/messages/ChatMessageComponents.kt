@@ -32,7 +32,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
-import androidx.compose.material.icons.outlined.Reply
+import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -47,7 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
@@ -186,7 +186,7 @@ internal fun ChatMessageRow(
                     var inlineMediaFailed by remember(inlineMedia) { mutableStateOf(false) }
                     Box {
                         Icon(
-                            Icons.Outlined.Reply, null, tint = Gold,
+                            Icons.AutoMirrored.Outlined.Reply, null, tint = Gold,
                             modifier = Modifier.align(if (mine) Alignment.CenterEnd else Alignment.CenterStart)
                                 .padding(if (mine) PaddingValues(end = 8.dp) else PaddingValues(start = 8.dp)).size(18.dp)
                                 .graphicsLayer { alpha = (abs(swipeOffset) / replyThreshold).coerceIn(0f, 1f) },
@@ -361,7 +361,8 @@ internal fun MessageActionsOverlay(
     onReply: () -> Unit,
     onReaction: (String) -> Unit,
 ) {
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
     val context = LocalContext.current
     var moreEmoji by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableIntStateOf(0) }
@@ -382,9 +383,13 @@ internal fun MessageActionsOverlay(
                     MessageActionCircle(onClick = { moreEmoji = !moreEmoji }) { Icon(Icons.Outlined.MoreHoriz, "More reactions", tint = Gold, modifier = Modifier.size(19.dp)) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    MessageLabeledAction(Modifier.weight(1f), Icons.Outlined.Reply, "Reply", onReply)
+                    MessageLabeledAction(Modifier.weight(1f), Icons.AutoMirrored.Outlined.Reply, "Reply", onReply)
                     MessageLabeledAction(Modifier.weight(1f), Icons.Outlined.ContentCopy, "Copy text") {
-                        clipboard.setText(AnnotatedString(message.text.ifBlank { message.mediaUrl.orEmpty() }))
+                        val copiedText = message.text.ifBlank { message.mediaUrl.orEmpty() }
+                        clipboardScope.launch {
+                            clipboard.setClipEntry(androidx.compose.ui.platform.ClipEntry(
+                                android.content.ClipData.newPlainText("Message", copiedText)))
+                        }
                         onDismiss()
                     }
                 }

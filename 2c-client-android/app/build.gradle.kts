@@ -38,8 +38,15 @@ android {
         applicationId = "com.twocents.mobile.kotlin"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.2.5"
+        versionCode = 17
+        versionName = "0.2.6"
+
+        // Direct APK distribution does not receive Play's ABI splits. Keep only
+        // the 64-bit ARM binaries used by current Android phones, rather than
+        // bundling VLC for ARM32 and desktop/emulator architectures as well.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {
@@ -130,6 +137,7 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-gif:3.3.0")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")
+    implementation("org.videolan.android:libvlc-all:3.7.0")
     implementation("com.google.firebase:firebase-messaging:24.1.0")
     implementation("com.github.Dimezis:BlurView:version-2.0.6")
     implementation("me.leolin:ShortcutBadger:1.1.22@aar")

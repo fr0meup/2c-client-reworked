@@ -38,7 +38,7 @@ internal fun parseComment(root: JSONObject): PostComment? {
     val uuid = root.string("uuid") ?: return null
     val authorMeta = root.optJSONObject("author_meta")
     val commentMeta = root.optJSONObject("comment_meta")
-    val text = root.string("text").orEmpty()
+    val text = com.twocents.mobile.ui.common.renderOfficialMentions(root.string("text").orEmpty(), commentMeta?.optJSONArray("mentions"))
     val media = buildList {
         listOf("giphy_url", "image_url", "imageUrl", "src").forEach { key ->
             commentMeta?.string(key)?.takeIf { it.isNotBlank() }?.let { add(normalizeMediaUrl(it)) }
@@ -65,6 +65,9 @@ internal fun parseComment(root: JSONObject): PostComment? {
         upvoteCount = root.int("upvote_count"),
         deleted = !root.isNull("deleted_at"),
         mediaUrls = media,
+        // Zero is the first choice, not an absent vote. Null stays absent.
+        pollUserVote = authorMeta?.nullableInt("poll_user_vote")?.takeIf { it in 0..3 },
+        pickUserVote = authorMeta?.string("pick_user_vote")?.lowercase(java.util.Locale.ROOT)?.takeIf { it == "yes" || it == "no" },
     )
 }
 

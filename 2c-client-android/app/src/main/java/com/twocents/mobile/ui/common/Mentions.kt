@@ -64,9 +64,6 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 private val MentionLink = Regex("\\[[^]]*]\\(/user/([0-9a-fA-F-]{32,36})\\)")
-private val ExactUuid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-private val MentionProfileCache = ConcurrentHashMap<String, ComposeAuthorProfile>()
-private val MentionAliasCache = ConcurrentHashMap<String, String>()
 
 internal data class MentionContext(val start: Int, val query: String)
 
@@ -110,7 +107,10 @@ internal fun transformMentionMarkup(source: AnnotatedString): TransformedText {
                 labelStart until (labelStart + raw.substring(labelStart).substringBefore(']').length)
             }
             while (original < labelRange.first) originalToVisual[original++] = length
+            val labelStart = length
             while (original <= labelRange.last) appendOriginal(original++)
+            addStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFFC8A44D), fontWeight = FontWeight.SemiBold,
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.None), labelStart, length)
             while (original <= match.range.last) originalToVisual[original++] = length
         }
         while (original < raw.length) appendOriginal(original++)
@@ -142,57 +142,27 @@ internal fun MentionSuggestions(
 ) {
     val query = context?.query ?: return
     val contextKey = "${context.start}:$query"
-    val profiles = remember { mutableStateMapOf<String, ComposeAuthorProfile>().apply { putAll(MentionProfileCache) } }
-    val directory = remember { mutableStateMapOf<String, String>().apply { putAll(MentionAliasCache); putAll(aliases) } }
-    LaunchedEffect(api, auth?.userUuid) {
+    val profiles = remember(auth?.userUuid) { mutableStateMapOf<String, ComposeAuthorProfile>() }
+    val directory = remember(auth?.userUuid) { mutableStateMapOf<String, String>() }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf(false) }
+    LaunchedEffect(api, auth?.userUuid, query) {
         if (api == null || auth == null) return@LaunchedEffect
-        runCatching { api.call("/v1/aliases/get", JSONObject(), auth) as? JSONObject }.getOrNull()
-            ?.optJSONArray("aliases")?.let { rows ->
-                for (index in 0 until rows.length()) rows.optJSONObject(index)?.let { row ->
-                    val user = row.optJSONObject("user")
-                    val uuid = row.optString("for_uuid").ifBlank { user?.optString("uuid").orEmpty() }
-                    val alias = row.optString("alias")
-                    if (uuid.isNotBlank() && alias.isNotBlank()) {
-                        directory[uuid] = alias; MentionAliasCache[uuid] = alias
-                        user?.let {
-                            val profile = ComposeAuthorProfile(uuid, it.optDouble("balance"), it.optInt("subscription_type", 1), it.optString("role").takeIf(String::isNotBlank), it.optString("gender").takeIf(String::isNotBlank), it.optInt("age").takeIf { _ -> it.has("age") && !it.isNull("age") }, it.optString("arena").takeIf(String::isNotBlank))
-                            profiles[uuid] = profile; MentionProfileCache[uuid] = profile
-                        }
-                    }
-                }
+        loading = true
+        loadError = false
+        directory.clear()
+        try {
+            kotlinx.coroutines.delay(200)
+            MutualMentionDirectory.get(api, auth, query).forEach { entry ->
+                directory[entry.uuid] = entry.alias
+                profiles[entry.uuid] = ComposeAuthorProfile(entry.uuid, entry.user.optDouble("balance", 0.0), entry.user.optInt("subscription_type", 0))
             }
+        } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel
+        } catch (_: Exception) { loadError = true
+        } finally { loading = false }
     }
-    val aliasMatches = directory.entries.asSequence()
-        .filter { (uuid, alias) -> alias.contains(query, ignoreCase = true) || uuid.contains(query, ignoreCase = true) }
-        .toList()
-    val matches = if (ExactUuid.matches(query) && directory[query] == null) {
-        listOf(java.util.AbstractMap.SimpleEntry(query, query.take(8))) + aliasMatches.filterNot { it.key == query }
-    } else aliasMatches
+    val matches = directory.entries.toList()
     LaunchedEffect(contextKey) { onShown() }
-    LaunchedEffect(matches.map { it.key }, api, auth) {
-        if (api == null || auth == null) return@LaunchedEffect
-        matches.filterNot { profiles.containsKey(it.key) }.map { entry -> async {
-            runCatching {
-                val root = api.call(
-                    "/v2/users/get",
-                    JSONObject().put("user_uuid", entry.key).put("posts_limit", 0).put("comments_limit", 0)
-                        .put("voted_posts_limit", 0).put("pick_votes_limit", 0),
-                    auth,
-                ) as? JSONObject
-                root?.optJSONObject("user")?.let { user ->
-                    ComposeAuthorProfile(
-                        uuid = entry.key,
-                        balance = user.optDouble("balance", 0.0),
-                        subscriptionType = user.optInt("subscription_type", 1),
-                        role = user.optString("role").takeIf(String::isNotBlank),
-                    )
-                }
-            }.getOrNull()?.let { entry.key to it }
-        } }.awaitAll().filterNotNull().forEach { (uuid, profile) ->
-            MentionProfileCache[uuid] = profile
-            profiles[uuid] = profile
-        }
-    }
     val density = LocalDensity.current
     val offsetPx = with(density) { IntOffset(offset.x.roundToPx(), offset.y.roundToPx()) }
     val gapPx = with(density) { gap.roundToPx() }
@@ -225,7 +195,7 @@ internal fun MentionSuggestions(
         ) {
         if (matches.isEmpty()) {
             Text(
-                if (query.length >= 36) "No user found" else "Type an alias or full UUID",
+                if (loading) "Loading mutual follows…" else if (loadError) "Couldn't load mutual follows. Try again." else "No matching mutual follows",
                 color = Color.White.copy(alpha = .38f), fontSize = 11.5.sp,
                 modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
             )
@@ -233,23 +203,17 @@ internal fun MentionSuggestions(
         matches.forEach { (uuid, alias) ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).clickable {
-                    val mentionLabel = profiles[uuid]?.let { NumberFormat.getIntegerInstance(Locale.US).format(it.balance.roundToLong()) } ?: alias
-                    onSelect(uuid, mentionLabel)
+                    onSelect(uuid, alias)
                 }
                     .padding(horizontal = 7.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                // This follows the rendered pill width, so long net-worth values
+                // keep the nickname aligned just beyond the pill's trailing edge.
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 val profile = profiles[uuid]
                 if (profile != null) {
-                    androidx.compose.foundation.layout.Box(
-                        Modifier.width(92.dp).height(27.dp).graphicsLayer {
-                            scaleX = .85f
-                            scaleY = .85f
-                            transformOrigin = TransformOrigin(0f, .5f)
-                        },
-                        contentAlignment = Alignment.CenterStart,
-                    ) { ComposeNetworthPill(profile, uuid, compact = true) }
+                    ComposeNetworthPill(profile, uuid, compact = true)
                 } else {
                     androidx.compose.foundation.layout.Box(
                         Modifier.width(92.dp).height(25.dp).clip(RoundedCornerShape(13.dp))
@@ -261,35 +225,4 @@ internal fun MentionSuggestions(
         }
         }
     }
-}
-
-internal suspend fun notifyMentions(
-    api: RpcApi,
-    auth: AuthState,
-    text: String,
-    postUuid: String,
-    commentUuid: String? = null,
-    contentType: String,
-) = coroutineScope {
-    val recipients = extractMentionUuids(text).filterNot { it == auth.userUuid }
-    if (recipients.isEmpty()) return@coroutineScope
-    suspend fun networth(uuid: String): String {
-        val root = api.call(
-            "/v2/users/get",
-            JSONObject().put("user_uuid", uuid).put("posts_limit", 0).put("comments_limit", 0).put("voted_posts_limit", 0),
-            auth,
-        ) as? JSONObject
-        val amount = root?.optJSONObject("user")?.optDouble("balance", 0.0) ?: 0.0
-        return "$${"%,d".format(amount.roundToLong())}"
-    }
-    val sender = runCatching { networth(auth.userUuid) }.getOrDefault("Someone")
-    recipients.map { recipient -> async {
-        runCatching {
-            val recipientNw = networth(recipient)
-            val target = "https://www.twocents.money/post/$postUuid" + (commentUuid?.let { "?comment=$it" } ?: "")
-            val dm = api.call("/v1/rooms/startDM", JSONObject().put("recipientUuid", recipient), auth) as? JSONObject
-            val roomUuid = dm?.optJSONObject("room")?.optString("uuid").orEmpty()
-            if (roomUuid.isNotBlank()) api.sendRoomMessage(roomUuid, "$sender mentioned $recipientNw in a $contentType.\nCheck it out here:\n$target", auth)
-        }
-    } }.awaitAll()
 }

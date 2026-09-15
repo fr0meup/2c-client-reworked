@@ -104,7 +104,7 @@ private object TweetRepository {
 }
 
 @Composable
-internal fun TweetEmbedCard(tweetUrl: String) {
+internal fun TweetEmbedCard(tweetUrl: String, balancedSpacing: Boolean = false) {
     val context = LocalContext.current
     val tweetId = remember(tweetUrl) { TweetIdPattern.find(tweetUrl)?.groupValues?.getOrNull(1) } ?: return
     var loading by remember(tweetId) { mutableStateOf(true) }
@@ -112,7 +112,7 @@ internal fun TweetEmbedCard(tweetUrl: String) {
     LaunchedEffect(tweetId) { tweet = TweetRepository.get(tweetId); loading = false }
 
     Column(
-        Modifier.fillMaxWidth().padding(top = 10.dp).clip(TweetShape).background(Color(0xFF090909))
+        Modifier.fillMaxWidth().padding(top = if (balancedSpacing) 6.dp else 10.dp, bottom = if (balancedSpacing) 6.dp else 0.dp).clip(TweetShape).background(Color(0xFF090909))
             .border(1.dp, Color.White.copy(alpha = .10f), TweetShape)
             .clickable { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(tweetUrl))) } }
             .padding(horizontal = 14.dp, vertical = 13.dp),

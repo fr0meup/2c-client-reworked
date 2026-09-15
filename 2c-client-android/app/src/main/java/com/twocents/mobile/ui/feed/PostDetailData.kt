@@ -15,7 +15,6 @@ import com.twocents.mobile.core.json.string
 import com.twocents.mobile.data.AliasRepository
 import com.twocents.mobile.data.VoteRepository
 import com.twocents.mobile.ui.compose.formatComposeTextForApi
-import com.twocents.mobile.ui.common.notifyMentions
 import com.twocents.mobile.ui.common.AppToast
 import com.twocents.mobile.ui.common.friendlyError
 import com.twocents.mobile.ui.settings.InteractionPreferences
@@ -102,12 +101,14 @@ internal class PostDetailController(
         state = state.copy(submitting = true)
         return runCatching {
             val imageUrl = imageUri?.let { uploadCommentImage(it, context) }
+            val mentioned = com.twocents.mobile.ui.common.officialMentionText(limitedText.trim(), api, auth)
             val created = api.call(
                 "/v1/comments/create",
                 JSONObject()
                     .put("post_uuid", seedPost.uuid)
-                    .put("text", formatComposeTextForApi(limitedText.trim()).ifBlank { "\u200B" })
-                    .put("in_reply_to_uuid", parentUuid.orEmpty())
+                    .put("text", formatComposeTextForApi(mentioned.text).ifBlank { "\u200B" } + if (mentioned.metadata.length() > 0) " " else "")
+                    .put("mentions", mentioned.metadata)
+                    .put("in_reply_to_uuid", parentUuid ?: seedPost.uuid)
                     .apply { imageUrl?.let { put("image_url", it) } },
                 auth,
             ) as? JSONObject
@@ -126,9 +127,6 @@ internal class PostDetailController(
                 submitting = false,
                 error = null,
             )
-            if (!createdCommentUuid.isNullOrBlank()) {
-                notifyMentions(api, auth, limitedText, seedPost.uuid, createdCommentUuid, "comment")
-            }
             val responseMessage = created?.optString("message").orEmpty()
             if (responseMessage.contains("moder", true) || responseMessage.contains("flag", true)) {
                 AppToast.error("Comment submitted for moderation")

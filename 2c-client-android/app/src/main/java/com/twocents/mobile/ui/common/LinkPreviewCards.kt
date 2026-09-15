@@ -23,13 +23,17 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** Same cached card in feed/detail, comments and chat; text remains selectable separately. */
 @Composable
-internal fun LinkPreviewCards(text: String, attached: String? = null, modifier: Modifier = Modifier) {
+internal fun LinkPreviewCards(text: String, attached: String? = null, modifier: Modifier = Modifier, balancedSpacing: Boolean = false) {
     val links = remember(text, attached) { previewLinks(text, attached) }
     if (links.isEmpty()) return
+    CompositionLocalProvider(LocalBalancedEmbedSpacing provides balancedSpacing) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        links.forEach { url -> key(url) { LinkPreviewCard(url) } }
+        links.forEach { url -> key(url) { NativeContentEmbed(url) { LinkPreviewCard(url) } } }
+    }
     }
 }
+
+internal val LocalBalancedEmbedSpacing = staticCompositionLocalOf { false }
 
 @Composable
 private fun LinkPreviewCard(url: String) {
@@ -45,7 +49,7 @@ private fun LinkPreviewCard(url: String) {
         }
     }
     val shape = RoundedCornerShape(12.dp)
-    Column(Modifier.fillMaxWidth().padding(top = 6.dp).clip(shape)
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = if (LocalBalancedEmbedSpacing.current) 6.dp else 0.dp).clip(shape)
         .background(Color(0xFF171713)).border(.6.dp, Color.White.copy(alpha = .12f), shape)
         .clickable {
             if (!AppLinkRouter.open(url)) runCatching { handler.openUri(url) }

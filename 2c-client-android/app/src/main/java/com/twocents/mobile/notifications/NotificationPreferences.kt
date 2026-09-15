@@ -56,7 +56,7 @@ internal object NotificationPreferences {
 internal fun notificationCategory(type: String, roomUuid: String? = null, roomType: String? = null): NotificationCategory {
     val normalized = type.lowercase()
     return when {
-        normalized.contains("reply") -> NotificationCategory.Replies
+        normalized.contains("reply") || normalized == "user_mentioned" -> NotificationCategory.Replies
         roomUuid != null || normalized.contains("message") || roomType.orEmpty().contains("dm", true) -> NotificationCategory.Messages
         normalized.contains("vote") -> NotificationCategory.Votes
         normalized.contains("follow") || normalized.contains("alias") -> NotificationCategory.Follows

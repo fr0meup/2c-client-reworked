@@ -307,6 +307,7 @@ private fun formatNotificationBalance(value: Double): String =
     "$" + java.text.NumberFormat.getIntegerInstance().format(value)
 
 private fun cleanNotificationPreview(raw: String): String = raw
+    .replace(com.twocents.mobile.ui.common.LegacyMention) { it.groupValues[1] }
     .replace(Regex("[\\u200B-\\u200F\\u2060-\\u206F\\uFEFF\\u3164]"), "")
     .replace(Regex("https?://\\S+\\.(?:gif|png|jpe?g|webp|mp4|mov)(?:\\?\\S*)?", RegexOption.IGNORE_CASE), "")
     .replace("\r\n", "\n")
@@ -322,7 +323,7 @@ private val NotificationMediaUrl = Regex(
 private fun NotificationIcon(type: String, downvote: Boolean, unread: Boolean) {
     val icon: ImageVector = when (type) {
         "post_voted", "comment_voted" -> if (downvote) NotificationIcons.ArrowBigDown else NotificationIcons.ArrowBigUp
-        "post_replied", "comment_replied", "room_reply" -> NotificationIcons.MessageSquareText
+        "post_replied", "comment_replied", "room_reply", "user_mentioned" -> NotificationIcons.MessageSquareText
         "poll_voted" -> NotificationIcons.BarChart3
         "followed", "followed_by" -> NotificationIcons.UserPlus
         "pick_resolved" -> NotificationIcons.CheckCircle2

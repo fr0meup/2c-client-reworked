@@ -129,6 +129,7 @@ internal class RoomChatController(
         state = state.copy(sending = true, messages = listOf(optimistic) + state.messages)
         var imageUrl: String? = remoteMedia
         return runCatching {
+            val mentioned = com.twocents.mobile.ui.common.officialMentionText(text.trim(), api, auth)
             if (localImage != null) imageUrl = uploadImage(localImage, context)
             if (localImage == null && !remoteMedia.isNullOrBlank() && !remoteMedia.contains("api.twocents.money/ugc/")) {
                 val (reportedType, bytes) = api.downloadBinary(remoteMedia)
@@ -148,7 +149,8 @@ internal class RoomChatController(
             // report the server-confirmed outcome even after leaving the room.
                 val result = api.call(
                     "/v1/rooms/sendMessageRest",
-                    JSONObject().put("roomUuid", room.uuid).put("text", text.trim())
+                    JSONObject().put("roomUuid", room.uuid).put("text", mentioned.text)
+                        .put("message_meta", JSONObject().put("mentions", mentioned.metadata))
                         .put("replyToMessageUuid", reply?.uuid.orEmpty()).apply { imageUrl?.let { put("imageUrl", it) } },
                     auth,
                 ) as? JSONObject ?: error("Message response was invalid")
@@ -324,7 +326,7 @@ internal fun JSONObject.toChatMessage(): ChatMessage? {
     val messageMeta = optJSONObject("message_meta") ?: JSONObject()
     return ChatMessage(
         uuid, chatString("created_at", "createdAt") ?: Instant.now().toString(), chatString("room_uuid", "roomUuid").orEmpty(), chatString("author_uuid", "authorUuid").orEmpty(),
-        optString("text"), chatString("reply_to_message_uuid", "replyToMessageUuid"), chatString("replyMessageText", "reply_message_text"),
+        com.twocents.mobile.ui.common.renderOfficialMentions(optString("text"), messageMeta.optJSONArray("mentions")), chatString("reply_to_message_uuid", "replyToMessageUuid"), chatString("replyMessageText", "reply_message_text"),
         ChatAuthor(authorMeta.optDouble("balance"), authorMeta.optInt("subscription_type", 1), authorMeta.chatString("role"), authorMeta.chatString("alias", "username", "display_name")),
         chatString("giphy_url") ?: messageMeta.chatString("giphy_url", "giphy_id", "imageUrl", "image_url", "src"), !isNull("deleted_at"),
     )

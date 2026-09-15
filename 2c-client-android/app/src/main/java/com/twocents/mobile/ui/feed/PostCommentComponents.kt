@@ -111,6 +111,7 @@ internal fun PostCommentRow(
     highlighted: Boolean,
     ownComment: Boolean,
     onDelete: () -> Unit,
+    isOriginalPoster: Boolean = false,
 ) {
     val view = LocalView.current
     val visualDepth = row.depth.coerceAtMost(5)
@@ -176,6 +177,7 @@ internal fun PostCommentRow(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 UserNetworthPill(displayAuthor, compact = true)
+                if (isOriginalPoster) CommentIdentityBadge("OP", "Original poster")
                 CommentTimestamp(comment.createdAt, Modifier.weight(1f))
             }
             if (!comment.deleted) CommentOptionsButton(comment, ownComment, onDelete)
@@ -186,16 +188,20 @@ internal fun PostCommentRow(
         } else if (body.isNotBlank()) {
             ExpandableCommentBody(body, comment.uuid)
         }
-        tweetUrl?.let { TweetEmbedCard(it) }
+        tweetUrl?.let { TweetEmbedCard(it, balancedSpacing = true) }
         CommentImageAttachments(comment.mediaUrls)
-        if (!comment.deleted) com.twocents.mobile.ui.common.LinkPreviewCards(comment.text)
+        if (!comment.deleted) com.twocents.mobile.ui.common.LinkPreviewCards(comment.text, balancedSpacing = true)
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                UserMetaPill(comment.author.toUserDisplay(comment.authorUuid, alias), alias, Modifier, compact = true, fillWidth = false)
+                UserMetaPill(comment.author.toUserDisplay(comment.authorUuid, alias), alias, Modifier, compact = true, fillWidth = false,
+                    leadingContent = (comment.pickUserVote?.let { if (it == "yes") "Yes" else "No" }
+                        ?: comment.pollUserVote?.let { ('A' + it).toString() })?.let { choice ->
+                        { CommentIdentityBadge("Voted $choice", "Voted $choice") }
+                    })
             }
             Row(
                 modifier = Modifier

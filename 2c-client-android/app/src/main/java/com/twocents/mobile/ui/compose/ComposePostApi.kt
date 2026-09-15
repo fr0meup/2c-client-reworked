@@ -35,7 +35,9 @@ suspend fun createComposePost(
         draft.option == ComposePostOption.Likert -> 5
         else -> 0
     }
+    val mentioned = com.twocents.mobile.ui.common.officialMentionText(draft.body, api, auth)
     val meta = JSONObject()
+        .put("mentions", mentioned.metadata)
         .put("version", 1)
         .put("platform", "android")
 
@@ -68,7 +70,7 @@ suspend fun createComposePost(
         params = JSONObject()
             .put("title", draft.title)
             .put("topic", composeTopicSlug(draft.topic))
-            .put("text", formatComposeTextForApi(draft.body))
+            .put("text", formatComposeTextForApi(mentioned.text))
             .put("post_type", postType)
             .put("post_meta", meta),
         auth = auth,
