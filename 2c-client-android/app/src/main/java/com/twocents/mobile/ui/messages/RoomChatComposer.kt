@@ -52,6 +52,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,6 +110,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+import com.twocents.mobile.ui.common.nativeMisspellingUnderlines
+import com.twocents.mobile.ui.common.rememberNativeMisspellings
 
 private val ChatNoPadding = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
 
@@ -130,6 +133,8 @@ internal fun RoomComposer(
     onSend: () -> Unit,
 ) {
     val view = LocalView.current
+    var inputLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val misspellings = rememberNativeMisspellings(input)
     Column(
         Modifier.fillMaxWidth().background(Background).drawBehind {
             drawLine(Color.White.copy(alpha = .08f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
@@ -179,9 +184,12 @@ internal fun RoomComposer(
             BasicTextField(
                 value = input,
                 onValueChange = onInput,
-                modifier = Modifier.weight(1f).heightIn(max = 100.dp),
+                modifier = Modifier.weight(1f).heightIn(max = 100.dp)
+                    .nativeMisspellingUnderlines(inputLayout, misspellings),
                 textStyle = TextStyle(color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, platformStyle = PlatformTextStyle(includeFontPadding = false)),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrectEnabled = true),
+                onTextLayout = { inputLayout = it },
                 decorationBox = { inner -> Box(contentAlignment = Alignment.CenterStart) { if (input.isEmpty()) Text("Message…", color = Color.White.copy(alpha = .3f), fontSize = 14.sp, style = ChatNoPadding); inner() } },
             )
             Box(Modifier.size(32.dp).clip(CircleShape).clickable { AppHaptics.open(view); onPickImage() }, contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Image, "Add image", tint = Color.White.copy(alpha = .45f), modifier = Modifier.size(18.dp)) }

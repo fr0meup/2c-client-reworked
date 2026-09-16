@@ -158,7 +158,8 @@ internal fun NotificationsShellScene(
     NotificationsPageHeader(
         onPressLogo = onPressLogo, onNavigateProfile = onNavigateProfile,
         profileSelected = profileSelected, unreadCount = controller.state.unreadCount,
-        replyCount = controller.state.replyCount, filter = filter, onSelectFilter = onSelectFilter,
+        replyCount = controller.state.replyCount, mentionCount = controller.state.mentionCount,
+        filter = filter, onSelectFilter = onSelectFilter,
         onMarkAllRead = onMarkAllRead, refreshing = refreshState.isRefreshing,
         modifier = Modifier.statusBarsPadding(),
     )

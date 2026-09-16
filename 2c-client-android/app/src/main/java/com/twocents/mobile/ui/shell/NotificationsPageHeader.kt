@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -96,6 +97,7 @@ fun NotificationsPageHeader(
     profileSelected: Boolean = false,
     unreadCount: Int = 0,
     replyCount: Int = 0,
+    mentionCount: Int = 0,
     filter: NotificationFilter = NotificationFilter.All,
     onSelectFilter: (NotificationFilter) -> Unit = {},
     onMarkAllRead: () -> Unit = {},
@@ -132,27 +134,36 @@ fun NotificationsPageHeader(
                 .border(1.dp, Color.White.copy(alpha = 0.06f), CircleShape)
                 .padding(3.dp),
         ) {
-            val density = LocalDensity.current
+            // Four equal, compact tabs stay visually grouped instead of spreading
+            // their labels across the full header. The indicator lives inside the
+            // same centered group, so its first position exactly matches tab one.
             val segmentWidth = maxWidth / NotificationFilter.entries.size
-            val targetOffsetPx = with(density) { (segmentWidth * filter.ordinal).toPx() }
-            val indicatorOffsetPx = androidx.compose.animation.core.animateFloatAsState(
-                targetValue = targetOffsetPx,
+            val groupWidth = segmentWidth * NotificationFilter.entries.size
+            val indicatorOffset = androidx.compose.animation.core.animateDpAsState(
+                targetValue = segmentWidth * filter.ordinal,
                 animationSpec = spring(dampingRatio = 0.92f, stiffness = 260f),
                 label = "notification-filter-offset",
             )
             Box(
                 modifier = Modifier
-                    .width(segmentWidth)
+                    .align(Alignment.Center)
+                    .width(groupWidth)
                     .fillMaxHeight()
-                    .graphicsLayer {
-                        translationX = indicatorOffsetPx.value
-                        shape = RoundedCornerShape(15.dp)
-                        clip = true
-                    }
-                    .background(Gold.copy(alpha = 0.15f))
-                    .border(1.dp, Gold.copy(alpha = 0.3f), RoundedCornerShape(15.dp)),
-            )
-            Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = indicatorOffset.value)
+                        .width(segmentWidth)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(Gold.copy(alpha = 0.15f))
+                        .border(1.dp, Gold.copy(alpha = 0.3f), RoundedCornerShape(15.dp)),
+                )
+            }
+            Row(
+                modifier = Modifier.width(groupWidth).fillMaxHeight().align(Alignment.Center),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 NotificationFilter.entries.forEach { item ->
                     val active = filter == item
                     val filterInteraction = remember(item) { MutableInteractionSource() }
@@ -171,13 +182,17 @@ fun NotificationsPageHeader(
                     Text(
                         text = item.label,
                         color = if (active) Gold else Color.White.copy(alpha = 0.48f),
-                        fontSize = 12.5.sp,
+                        fontSize = if (NotificationFilter.entries.size > 3) 11.sp else 12.5.sp,
                         fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     val count = when (item) {
                         NotificationFilter.All -> 0
                         NotificationFilter.Unread -> unreadCount
                         NotificationFilter.Replies -> replyCount
+                        NotificationFilter.Mentions -> mentionCount
                     }
                     if (count > 0) {
                         NotificationCountBadge(count = count, active = active)
@@ -214,4 +229,3 @@ private fun NotificationCountBadge(count: Int, active: Boolean) {
         )
     }
 }
-

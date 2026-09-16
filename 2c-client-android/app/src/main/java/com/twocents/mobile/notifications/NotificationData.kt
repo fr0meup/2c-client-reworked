@@ -35,6 +35,7 @@ enum class NotificationFilter(val label: String) {
     All("All"),
     Unread("Unread"),
     Replies("Replies"),
+    Mentions("Mentions"),
 }
 
 @Immutable
@@ -91,6 +92,10 @@ data class NotificationUiState(
     val replyCount: Int get() = notifications.count {
         it.readAt == null && NotificationPreferences.cachedEnabled(notificationCategory(it.type, it.roomUuid), push = false) &&
             (it.type == "post_replied" || it.type == "comment_replied" || it.type == "room_reply")
+    }
+    val mentionCount: Int get() = notifications.count {
+        it.readAt == null && it.type == "user_mentioned" &&
+            NotificationPreferences.cachedEnabled(notificationCategory(it.type, it.roomUuid), push = false)
     }
 }
 
@@ -218,6 +223,7 @@ class NotificationController(
                 NotificationPreferences.cachedEnabled(notificationCategory(notification.type, notification.roomUuid), push = false) && when (filter) {
                 NotificationFilter.All, NotificationFilter.Unread -> true
                 NotificationFilter.Replies -> notification.type in setOf("post_replied", "comment_replied", "room_reply")
+                NotificationFilter.Mentions -> notification.type == "user_mentioned"
             }
         }
         if (unread.isEmpty()) return

@@ -74,6 +74,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -91,6 +93,8 @@ import com.twocents.mobile.ui.common.MentionSuggestions
 import com.twocents.mobile.ui.common.MentionVisualTransformation
 import com.twocents.mobile.ui.common.mentionContext
 import com.twocents.mobile.ui.common.mentionMarkup
+import com.twocents.mobile.ui.common.nativeMisspellingUnderlines
+import com.twocents.mobile.ui.common.rememberNativeMisspellings
 import com.twocents.mobile.ui.compose.GifPickerSheet
 import com.twocents.mobile.ui.common.LinkifiedText
 import kotlinx.coroutines.launch
@@ -118,6 +122,11 @@ internal fun CommentComposer(
     val focusRequester = remember { FocusRequester() }
     var editor by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
     val text = editor.text
+    var editorLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val visibleEditorText = remember(text) {
+        MentionVisualTransformation.filter(AnnotatedString(text)).text.text
+    }
+    val misspellings = rememberNativeMisspellings(visibleEditorText)
     var imageUri by remember { mutableStateOf<String?>(null) }
     var imagePreviewOpen by remember { mutableStateOf(false) }
     var gifPickerOpen by remember { mutableStateOf(false) }
@@ -259,8 +268,11 @@ internal fun CommentComposer(
                     platformStyle = PlatformTextStyle(includeFontPadding = false),
                 ),
                 cursorBrush = SolidColor(DetailGold),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrectEnabled = true),
                 visualTransformation = MentionVisualTransformation,
-                modifier = Modifier.weight(1f).focusRequester(focusRequester).padding(vertical = 6.dp),
+                onTextLayout = { editorLayout = it },
+                modifier = Modifier.weight(1f).focusRequester(focusRequester).padding(vertical = 6.dp)
+                    .nativeMisspellingUnderlines(editorLayout, misspellings),
                 decorationBox = { inner ->
                     Box {
                         if (text.isEmpty()) Text(

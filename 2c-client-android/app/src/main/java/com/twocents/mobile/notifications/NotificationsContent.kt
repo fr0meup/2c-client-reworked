@@ -45,6 +45,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
@@ -88,6 +89,7 @@ fun NotificationsContent(
         NotificationFilter.Replies -> categoryVisible.filter {
             it.type == "post_replied" || it.type == "comment_replied" || it.type == "room_reply"
         }
+        NotificationFilter.Mentions -> categoryVisible.filter { it.type == "user_mentioned" }
     }
 
     when {
@@ -321,9 +323,21 @@ private val NotificationMediaUrl = Regex(
 
 @Composable
 private fun NotificationIcon(type: String, downvote: Boolean, unread: Boolean) {
+    if (type == "user_mentioned") {
+        Box(
+            modifier = Modifier.size(36.dp).clip(CircleShape)
+                .background(if (unread) Gold.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("@", color = if (unread) Gold else Color.White.copy(alpha = 0.4f), fontSize = 20.sp,
+                lineHeight = 20.sp, fontWeight = FontWeight.Bold,
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)))
+        }
+        return
+    }
     val icon: ImageVector = when (type) {
         "post_voted", "comment_voted" -> if (downvote) NotificationIcons.ArrowBigDown else NotificationIcons.ArrowBigUp
-        "post_replied", "comment_replied", "room_reply", "user_mentioned" -> NotificationIcons.MessageSquareText
+        "post_replied", "comment_replied", "room_reply" -> NotificationIcons.MessageSquareText
         "poll_voted" -> NotificationIcons.BarChart3
         "followed", "followed_by" -> NotificationIcons.UserPlus
         "pick_resolved" -> NotificationIcons.CheckCircle2
@@ -357,18 +371,33 @@ private fun NotificationEmptyState(
         error != null -> "Couldn't load notifications"
         filter == NotificationFilter.Unread -> "You're all caught up"
         filter == NotificationFilter.Replies -> "No replies yet"
+        filter == NotificationFilter.Mentions -> "No mentions yet"
         else -> "No notifications yet"
     }
     val subtitle = when {
         error != null -> error
         filter == NotificationFilter.Unread -> "No unread notifications to show."
         filter == NotificationFilter.Replies -> "Replies to your posts and comments will appear here."
+        filter == NotificationFilter.Mentions -> "Posts and comments that mention you will appear here."
         else -> "Votes, replies, follows, and account activity will appear here."
     }
     Box(modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = Color.White.copy(alpha = 0.4f), fontSize = 13.sp)
+            Text(
+                title,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                subtitle,
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

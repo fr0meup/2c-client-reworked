@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,6 +57,8 @@ import coil3.request.ImageRequest
 import coil3.video.videoFrameMillis
 import com.twocents.mobile.ui.theme.Gold
 import com.twocents.mobile.ui.feed.FeedVideoPlayer
+import com.twocents.mobile.ui.common.nativeMisspellingUnderlines
+import com.twocents.mobile.ui.common.rememberNativeMisspellings
 
 @Composable
 fun ComposePollCard(
@@ -195,6 +198,8 @@ private fun ComposeSmallInput(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val misspellings = rememberNativeMisspellings(value)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
@@ -202,7 +207,7 @@ private fun ComposeSmallInput(
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
     ) {
         BasicTextField(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().nativeMisspellingUnderlines(textLayout, misspellings),
             value = value,
             onValueChange = { onValueChange(it.take(80)) },
             singleLine = true,
@@ -213,6 +218,8 @@ private fun ComposeSmallInput(
                 platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
             ),
             cursorBrush = SolidColor(Color.White),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrectEnabled = true),
+            onTextLayout = { textLayout = it },
             decorationBox = { inner ->
                 // Decoration belongs to the field so its full padded area accepts taps.
                 Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {

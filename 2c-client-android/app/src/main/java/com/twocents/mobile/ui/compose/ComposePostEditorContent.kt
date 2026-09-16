@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -35,6 +36,8 @@ import com.twocents.mobile.RpcApi
 import com.twocents.mobile.ui.common.MentionSuggestions
 import com.twocents.mobile.ui.common.mentionContext
 import com.twocents.mobile.ui.common.mentionMarkup
+import com.twocents.mobile.ui.common.nativeMisspellingUnderlines
+import com.twocents.mobile.ui.common.rememberNativeMisspellings
 import com.twocents.mobile.ui.feed.FeedPost
 import com.twocents.mobile.ui.feed.FeedQuoteCard
 
@@ -69,6 +72,11 @@ internal fun ComposePostEditorContent(
 ) {
     val density = LocalDensity.current
     var editorFocused by remember { mutableStateOf(false) }
+    val richTextTransformation = remember(styleRanges) { ComposeRichTextTransformation(styleRanges) }
+    val visibleBodyText = remember(body.text, richTextTransformation) {
+        richTextTransformation.filter(AnnotatedString(body.text)).text.text
+    }
+    val misspellings = rememberNativeMisspellings(visibleBodyText)
     Box(modifier = modifier) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(bodyScrollState)
@@ -80,6 +88,7 @@ internal fun ComposePostEditorContent(
                     onValueChange = onBodyChange,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp).padding(top = 2.dp)
                         .bringIntoViewRequester(bringIntoViewRequester).focusRequester(focusRequester)
+                        .nativeMisspellingUnderlines(bodyTextLayout, misspellings)
                         .onFocusChanged {
                             editorFocused = it.isFocused
                             onFocusChanged(it.isFocused)
@@ -89,8 +98,10 @@ internal fun ComposePostEditorContent(
                         platformStyle = PlatformTextStyle(includeFontPadding = false),
                     ),
                     cursorBrush = SolidColor(Color.White),
-                    visualTransformation = ComposeRichTextTransformation(styleRanges),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                    visualTransformation = richTextTransformation,
+                    // Keep the platform spell checker enabled: Android/Gboard owns
+                    // dictionaries and draws its native misspelling indicator.
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default, autoCorrectEnabled = true),
                     onTextLayout = onTextLayout,
                     decorationBox = { innerTextField ->
                         Box {

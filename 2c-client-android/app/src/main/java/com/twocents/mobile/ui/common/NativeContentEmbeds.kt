@@ -36,10 +36,16 @@ internal fun nativeContentTarget(url: String): NativeContentTarget? {
 
 internal val LocalContentEmbeds = staticCompositionLocalOf<NativeContentRepository?> { null }
 private val LocalEmbedDepth = staticCompositionLocalOf { 0 }
-internal data class NativeContent(val post: FeedPost?, val comment: PostComment?)
+internal data class NativeContent(
+    val post: FeedPost?,
+    val comment: PostComment?,
+    val pollVote: Int? = null,
+    val pollResults: Map<Int, FeedOptionResult>? = null,
+)
 
 /** Short-lived account-local cache; duplicate embeds share requests and never recurse. */
 internal class NativeContentRepository(private val api: RpcApi, private val auth: AuthState) {
+    internal val authUserUuid: String get() = auth.userUuid
     private val mutex = Mutex()
     private val cache = linkedMapOf<NativeContentTarget, Pair<Long, NativeContent>>()
     private var aliases = emptyMap<String, String>()
@@ -55,8 +61,19 @@ internal class NativeContentRepository(private val api: RpcApi, private val auth
             } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel } catch (_: Exception) { /* Alias failure must not hide otherwise available content. */ }
         }
         val content = if (target.commentUuid == null) {
-            val post = loadFeedPost(api, auth, target.postUuid)
-            NativeContent(post?.copy(author = post.author.copy(alias = aliases[post.authorUuid] ?: post.author.alias)), null)
+            // The detail response contains the viewer's selected poll option.
+            val root = api.call("/v1/posts/get", JSONObject().put("post_uuid", target.postUuid), auth) as? JSONObject
+            val post = root?.optJSONObject("post")?.let(::parseFeedPost)
+                ?.let { it.copy(author = it.author.copy(alias = aliases[it.authorUuid] ?: it.author.alias)) }
+            val vote = root?.optJSONArray("polls")?.let { rows ->
+                (0 until rows.length()).mapNotNull(rows::optJSONObject)
+                    .firstOrNull { it.has("option") }?.optInt("option")
+            }
+            val results = if (post?.hasPoll == true) {
+                val poll = api.call("/v1/polls/get", JSONObject().put("post_uuid", post.uuid), auth) as? JSONObject
+                parseOptionResults(poll?.optJSONObject("results"), averageKeys = listOf("average_balance"))
+            } else null
+            NativeContent(post, null, vote, results)
         } else {
             val root = api.call("/v1/comments/get", JSONObject().put("post_uuid", target.postUuid), auth) as? JSONObject
                 ?: error("Comment unavailable")
@@ -87,7 +104,10 @@ internal fun NativeContentEmbed(url: String, fallback: @Composable () -> Unit) {
     CompositionLocalProvider(LocalEmbedDepth provides 1) {
         val post = content?.post
         val comment = content?.comment
-        if (post != null) FeedQuoteCard(post, onClick = { AppLinkRouter.open(url) }, showUserMeta = true)
+        if (post != null) FeedQuoteCard(
+            post, onClick = { AppLinkRouter.open(url) }, showUserMeta = true, authUuid = repository.authUserUuid,
+            embeddedPollVote = content?.pollVote, embeddedPollResults = content?.pollResults,
+        )
         else Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = if (LocalBalancedEmbedSpacing.current) 6.dp else 0.dp).clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = .02f))
             .border(1.dp, Color.White.copy(alpha = .08f), RoundedCornerShape(14.dp))

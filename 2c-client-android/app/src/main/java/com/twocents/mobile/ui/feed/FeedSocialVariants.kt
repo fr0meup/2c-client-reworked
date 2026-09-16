@@ -87,7 +87,11 @@ internal fun FeedPicksCard(
 }
 
 @Composable
-internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, controller: FeedController? = null, authUuid: String? = null, showUserMeta: Boolean = false) {
+internal fun FeedQuoteCard(
+    quote: FeedPost, onClick: (() -> Unit)? = null, controller: FeedController? = null, authUuid: String? = null,
+    showUserMeta: Boolean = false, embeddedPollVote: Int? = null,
+    embeddedPollResults: Map<Int, FeedOptionResult>? = null,
+) {
     val scope = rememberCoroutineScope()
     var loadedPollVote by remember(quote.uuid, controller) { mutableStateOf<Int?>(null) }
     // A parent-feed response contains votes for outer posts and can replace
@@ -142,8 +146,8 @@ internal fun FeedQuoteCard(quote: FeedPost, onClick: (() -> Unit)? = null, contr
         val videoUrl = quote.meta.videoUrl
         if (quote.hasPoll) FeedPollCard(
             post = quote,
-            userVote = livePollVote ?: loadedPollVote,
-            results = controller?.state?.pollResults?.get(quote.uuid),
+            userVote = livePollVote ?: loadedPollVote ?: embeddedPollVote,
+            results = controller?.state?.pollResults?.get(quote.uuid) ?: embeddedPollResults,
             isOwner = authUuid == quote.authorUuid,
             onVote = { option ->
                 if (controller != null) com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch {
