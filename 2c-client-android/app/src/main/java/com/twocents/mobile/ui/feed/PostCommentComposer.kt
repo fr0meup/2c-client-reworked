@@ -93,6 +93,8 @@ import com.twocents.mobile.ui.common.MentionSuggestions
 import com.twocents.mobile.ui.common.MentionVisualTransformation
 import com.twocents.mobile.ui.common.mentionContext
 import com.twocents.mobile.ui.common.mentionMarkup
+import com.twocents.mobile.ui.common.TickerSuggestions
+import com.twocents.mobile.ui.common.tickerContext
 import com.twocents.mobile.ui.common.nativeMisspellingUnderlines
 import com.twocents.mobile.ui.common.rememberNativeMisspellings
 import com.twocents.mobile.ui.compose.GifPickerSheet
@@ -246,6 +248,20 @@ internal fun CommentComposer(
             gap = 9.dp,
             api = api,
             auth = auth,
+        )
+        val activeTicker = tickerContext(text, editor.selection.end)
+        TickerSuggestions(
+            context = activeTicker, api = api, auth = auth,
+            onSelect = { symbol ->
+                activeTicker?.let {
+                    val replacement = "$${symbol} "
+                    val candidate = text.replaceRange(it.start, editor.selection.end, replacement)
+                    if (candidate.length <= 1_000) editor = androidx.compose.ui.text.input.TextFieldValue(
+                        candidate, androidx.compose.ui.text.TextRange(it.start + replacement.length))
+                }
+                focusRequester.requestFocus()
+            },
+            placeAbove = true, gap = 9.dp,
         )
         Row(
             modifier = Modifier

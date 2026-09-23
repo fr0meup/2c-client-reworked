@@ -84,7 +84,9 @@ internal fun extractMentionUuids(text: String): Set<String> =
 
 /** Keeps UUID metadata in the submitted text while exposing only the readable @label in editors. */
 internal object MentionVisualTransformation : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText = transformMentionMarkup(text)
+    override fun filter(text: AnnotatedString): TransformedText = transformMentionMarkup(text).let {
+        TransformedText(annotateTickers(it.text), it.offsetMapping)
+    }
 }
 
 internal fun transformMentionMarkup(source: AnnotatedString): TransformedText {

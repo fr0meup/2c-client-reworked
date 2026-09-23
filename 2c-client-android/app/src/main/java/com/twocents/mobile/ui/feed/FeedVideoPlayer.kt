@@ -156,9 +156,9 @@ internal fun FeedVideoPlayer(
         }
     }
 
-    if (!previewLoading && preview == null && cachedMediaRatio(safeUri) != null &&
+    if (!previewLoading && preview == null &&
         Uri.parse(safeUri).path?.endsWith(".mov", true) == true && InteractionPreferences.automaticMediaAllowed(context)) {
-        SoftwareFeedVideoPlayer(safeUri, null, modifier, compact, cachedMediaRatio(safeUri)!!,
+        SoftwareFeedVideoPlayer(safeUri, null, modifier, compact, cachedMediaRatio(safeUri) ?: (16f / 9f),
             autoPlay || handoff.resumePlaying, handoffOnMount, { activated = false; autoPlay = false })
     } else if (activated) {
         ActiveFeedVideoPlayer(

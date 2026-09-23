@@ -17,15 +17,22 @@ object ProfileNavigationBus {
         private set
 
     fun open(userUuid: String) {
-        if (userUuid.isNotBlank()) requestChannel.trySend(Request(userUuid))
+        if (userUuid.isNotBlank()) {
+            com.twocents.mobile.ui.common.TickerOverlayExit.dismissAll()
+            requestChannel.trySend(Request(userUuid))
+        }
     }
 
     fun open(profile: ComposeAuthorProfile) {
-        if (profile.uuid.isNotBlank()) requestChannel.trySend(Request(profile.uuid, profile))
+        if (profile.uuid.isNotBlank()) {
+            com.twocents.mobile.ui.common.TickerOverlayExit.dismissAll()
+            requestChannel.trySend(Request(profile.uuid, profile))
+        }
     }
 
     fun openForFollow(userUuid: String) {
         if (userUuid.isBlank()) return
+        com.twocents.mobile.ui.common.TickerOverlayExit.dismissAll()
         followPromptUuid = userUuid
         requestChannel.trySend(Request(userUuid))
     }

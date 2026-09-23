@@ -53,24 +53,81 @@ internal class RoomChatController(
     private var typingActive = false
     private var typingStopJob: Job? = null
     private val typingExpiryJobs = mutableMapOf<String, Job>()
+    private var nextOlderOffset = 0
+    private var olderLoadInProgress = false
+    private var repeatedOlderPages = 0
+    private val pageSize = 100
 
     suspend fun load(): Boolean {
         state = state.copy(loading = state.messages.isEmpty(), error = null)
         runCatching {
             val root = api.call(
                 "/v1/rooms/getMessages",
-                JSONObject().put("roomUuid", room.uuid).put("offset", 0).put("limit", 100),
+                JSONObject().put("roomUuid", room.uuid).put("offset", 0).put("limit", pageSize),
                 auth,
             ) as? JSONObject ?: error("Messages response was invalid")
-            val messages = root.optJSONArray("messages").chatMessages()
+            val page = root.optJSONArray("messages")
+            val messages = page.chatMessages()
                 .sortedByDescending { parseApiInstant(it.createdAt)?.toEpochMilli() ?: 0L }
             val reactions = root.optJSONArray("reactions").chatReactions().groupBy(ChatReaction::messageUuid)
-            state = state.copy(messages = messages, reactions = reactions, loading = false)
+            val existing = state.messages
+            val combined = (messages + existing).distinctBy(ChatMessage::uuid)
+                .sortedByDescending { parseApiInstant(it.createdAt)?.toEpochMilli() ?: 0L }
+            val pageCount = page?.length() ?: 0
+            val existingPositions = existing.filterNot(ChatMessage::optimistic).withIndex()
+                .associate { it.value.uuid to it.index }
+            val overlapShift = messages.withIndex().mapNotNull { (index, message) ->
+                existingPositions[message.uuid]?.let { index - it }
+            }.maxOrNull()
+            // A refresh can arrive after more than one page of missed messages.
+            // Without overlap, restart paging at the fresh page so the gap is not skipped.
+            nextOlderOffset = when {
+                existingPositions.isEmpty() -> pageCount
+                overlapShift == null -> pageCount
+                else -> maxOf(nextOlderOffset + overlapShift.coerceAtLeast(0), pageCount)
+            }
+            state = state.copy(messages = combined, reactions = state.reactions + reactions,
+                loading = false, hasOlder = (pageCount >= pageSize) || (overlapShift != null && state.hasOlder),
+                olderError = false)
         }.onFailure { error ->
             if (error is CancellationException) throw error
             state = state.copy(loading = false, error = error.message ?: "Couldn't load messages")
         }
         return state.error == null
+    }
+
+    /** Offset counts server rows, including newly received messages; optimistic rows never count. */
+    suspend fun loadOlder(requestedLimit: Int = pageSize) {
+        if (olderLoadInProgress || !state.hasOlder || state.loading || state.olderError) return
+        olderLoadInProgress = true
+        state = state.copy(loadingOlder = true)
+        try {
+            val root = api.call("/v1/rooms/getMessages",
+                JSONObject().put("roomUuid", room.uuid).put("offset", nextOlderOffset).put("limit", requestedLimit),
+                auth) as? JSONObject ?: error("Messages response was invalid")
+            val page = root.optJSONArray("messages")
+            val rows = page.chatMessages()
+            nextOlderOffset += page?.length() ?: 0
+            val previousCount = state.messages.size
+            val combined = (state.messages + rows).distinctBy(ChatMessage::uuid)
+                .sortedByDescending { parseApiInstant(it.createdAt)?.toEpochMilli() ?: 0L }
+            repeatedOlderPages = if (combined.size == previousCount && rows.isNotEmpty()) repeatedOlderPages + 1 else 0
+            val reactions = root.optJSONArray("reactions").chatReactions().groupBy(ChatReaction::messageUuid)
+            state = state.copy(messages = combined, reactions = state.reactions + reactions,
+                hasOlder = (page?.length() ?: 0) >= minOf(requestedLimit, pageSize) && repeatedOlderPages < 2,
+                loadingOlder = false, olderError = false)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            state = state.copy(loadingOlder = false, olderError = true)
+        } finally {
+            olderLoadInProgress = false
+        }
+    }
+
+    fun retryOlder() {
+        state = state.copy(olderError = false)
+        scope.launch { loadOlder() }
     }
 
     fun connect() {
@@ -267,7 +324,8 @@ internal class RoomChatController(
                 val withoutDuplicate = state.messages.filterNot { current ->
                     current.uuid == incoming.uuid || (current.optimistic && current.authorUuid == incoming.authorUuid && current.text == incoming.text)
                 }
-                state = state.copy(messages = (listOf(displayedIncoming) + withoutDuplicate).take(200))
+                if (state.messages.none { it.uuid == incoming.uuid }) nextOlderOffset += 1
+                state = state.copy(messages = listOf(displayedIncoming) + withoutDuplicate)
                 incoming.mediaUrl?.let { media ->
                     RoomMediaPreviewStore.put(appContext, room.uuid, if (media.substringBefore('?').endsWith(".gif", true)) "GIF" else "Image", incoming.createdAt)
                 }
@@ -301,6 +359,7 @@ internal class RoomChatController(
     }
 
     private fun replaceOptimistic(uuid: String, message: ChatMessage) {
+        if (state.messages.none { it.uuid == message.uuid }) nextOlderOffset += 1
         state = state.copy(messages = listOf(message.copy(justSent = true)) + state.messages.filterNot { it.uuid == uuid || it.uuid == message.uuid })
         clearSentLabelLater(message.uuid)
     }

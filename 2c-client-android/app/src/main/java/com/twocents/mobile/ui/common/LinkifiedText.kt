@@ -37,7 +37,7 @@ fun LinkifiedText(
     onTextClick: (() -> Unit)? = null,
 ) {
     val uriHandler = LocalUriHandler.current
-    val annotated = remember(text, linkColor) { linkify(renderOfficialMentions(text, null), linkColor) }
+    val annotated = remember(text, linkColor) { annotateTickers(linkify(renderOfficialMentions(text, null), linkColor)) }
     val style = TextStyle(
         color = color,
         fontSize = fontSize,
@@ -59,6 +59,7 @@ fun LinkifiedText(
                 if (raw == null) onTextClick?.invoke() else {
                     val mentionUuid = raw.removePrefix("mention:").takeIf { raw.startsWith("mention:") }
                     if (mentionUuid != null) ProfileNavigationBus.open(mentionUuid)
+                    else if (raw.startsWith("ticker:")) TickerNavigation.open(raw.removePrefix("ticker:"))
                     else {
                         val normalized = if (raw.startsWith("www.", true)) "https://$raw" else raw
                         if (!AppLinkRouter.open(normalized)) runCatching { uriHandler.openUri(normalized) }

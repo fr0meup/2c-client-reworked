@@ -107,9 +107,10 @@ internal fun NativeContentEmbed(url: String, fallback: @Composable () -> Unit) {
         if (post != null) FeedQuoteCard(
             post, onClick = { AppLinkRouter.open(url) }, showUserMeta = true, authUuid = repository.authUserUuid,
             embeddedPollVote = content?.pollVote, embeddedPollResults = content?.pollResults,
+            opaqueSurface = LocalChatEmbedSurface.current,
         )
         else Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = if (LocalBalancedEmbedSpacing.current) 6.dp else 0.dp).clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = .02f))
+            .background(if (LocalChatEmbedSurface.current) Color(0xFF171713) else Color.White.copy(alpha = .02f))
             .border(1.dp, Color.White.copy(alpha = .08f), RoundedCornerShape(14.dp))
             .clickable { AppLinkRouter.open(url) }.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             if (comment == null) Text("Loading twocents ${if (target.commentUuid == null) "post" else "comment"}…", color = Color.Gray, fontSize = 12.sp)

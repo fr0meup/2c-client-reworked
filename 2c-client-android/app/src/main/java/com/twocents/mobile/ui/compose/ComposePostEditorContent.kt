@@ -36,6 +36,8 @@ import com.twocents.mobile.RpcApi
 import com.twocents.mobile.ui.common.MentionSuggestions
 import com.twocents.mobile.ui.common.mentionContext
 import com.twocents.mobile.ui.common.mentionMarkup
+import com.twocents.mobile.ui.common.TickerSuggestions
+import com.twocents.mobile.ui.common.tickerContext
 import com.twocents.mobile.ui.common.nativeMisspellingUnderlines
 import com.twocents.mobile.ui.common.rememberNativeMisspellings
 import com.twocents.mobile.ui.feed.FeedPost
@@ -144,6 +146,21 @@ internal fun ComposePostEditorContent(
                     modifier = Modifier.widthIn(max = 328.dp),
                     api = mentionApi,
                     auth = mentionAuth,
+                )
+                TickerSuggestions(
+                    context = if (editorFocused) tickerContext(body.text, body.selection.end) else null,
+                    api = mentionApi, auth = mentionAuth,
+                    onSelect = { symbol ->
+                        val ticker = tickerContext(body.text, body.selection.end) ?: return@TickerSuggestions
+                        val replacement = "$${symbol} "
+                        val next = body.text.replaceRange(ticker.start, body.selection.end, replacement)
+                        onBodyChange(TextFieldValue(next, TextRange(ticker.start + replacement.length)))
+                        focusRequester.requestFocus()
+                    },
+                    offset = DpOffset(0.dp, if (suggestionsAbove) cursorTopDp
+                        else with(density) { (cursorRect?.bottom ?: 20f).toDp() }),
+                    placeAbove = suggestionsAbove, gap = 7.dp,
+                    modifier = Modifier.widthIn(max = 328.dp),
                 )
             }
             if (activeOption != ComposePostOption.Poll) {

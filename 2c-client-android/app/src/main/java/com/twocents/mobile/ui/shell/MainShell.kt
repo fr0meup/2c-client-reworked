@@ -62,6 +62,11 @@ fun MainShell(
             overlayStack = overlayStack + ShellOverlayEntry.Quotes(nextOverlayId++, request.post, request.controller)
         }
     }
+    LaunchedEffect(auth.userUuid) {
+        com.twocents.mobile.ui.common.TickerNavigation.requests.collect { symbol ->
+            overlayStack = overlayStack + ShellOverlayEntry.Ticker(nextOverlayId++, symbol)
+        }
+    }
     fun pushProfile(userUuid: String, seed: ComposeAuthorProfile? = null) {
         // Overlay entries retain their own identity so nested profile/post chains
         // unwind one screen at a time instead of reconstructing a destination.

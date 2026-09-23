@@ -83,6 +83,23 @@ internal fun RetainedOverlayHost(
                         onOpenPost = { onPushPost(OpenedPost(it, entry.controller)) },
                         onDismiss = onPop,
                     )
+                } else if (entry is ShellOverlayEntry.Ticker) {
+                    val scope = rememberCoroutineScope()
+                    com.twocents.mobile.ui.common.TickerSheet(
+                        symbol = entry.symbol,
+                        visible = top,
+                        onDismiss = onPop,
+                        onOpenPost = { knownPost, sourceController, postUuid, commentUuid ->
+                            val controller = sourceController ?: feedController
+                            if (knownPost != null) {
+                                onPushPost(OpenedPost(knownPost, controller, commentUuid))
+                            } else scope.launch {
+                                runCatching { loadFeedPost(api, auth, postUuid) }.getOrNull()?.let {
+                                    onPushPost(OpenedPost(it, controller, commentUuid))
+                                }
+                            }
+                        },
+                    )
                 } else {
                 val offset = remember(entry.id) { Animatable(screenWidthPx) }
                 LaunchedEffect(entry.id) { offset.animateTo(0f, tween(180, easing = ShellOutCubic)) }
@@ -102,6 +119,7 @@ internal fun RetainedOverlayHost(
                 ) {
                     when (entry) {
                         is ShellOverlayEntry.Quotes -> Unit // Hosted as a retained sheet above.
+                        is ShellOverlayEntry.Ticker -> Unit // Hosted as a retained sheet above.
                         is ShellOverlayEntry.Profile -> {
                             var loadedProfile by remember(entry.id) { mutableStateOf(entry.seed) }
                             var scrollRequest by remember(entry.id) { mutableStateOf(0) }

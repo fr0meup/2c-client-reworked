@@ -158,7 +158,17 @@ fun RoomChatScreen(
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { selectedImage = it }
 
     BackHandler(enabled = navigationEnabled, onBack = onBack)
-    LaunchedEffect(controller) { controller.load(); controller.connect() }
+    LaunchedEffect(controller) {
+        controller.load()
+        controller.connect()
+        // The initial viewport may be beyond page one. Load its boundary
+        // explicitly: the normal scroll pager cannot see rows hidden by the skeleton.
+        while (openingUnreadCount >= controller.state.messages.size &&
+            controller.state.messages.isNotEmpty() && controller.state.hasOlder && !controller.state.olderError) {
+            val missing = openingUnreadCount - controller.state.messages.size + 1
+            controller.loadOlder(missing.coerceIn(100, 500))
+        }
+    }
     LaunchedEffect(navigationEnabled) {
         if (navigationEnabled && reopenInfoAfterProfile) {
             reopenInfoAfterProfile = false
@@ -166,8 +176,19 @@ fun RoomChatScreen(
         }
     }
     DisposableEffect(controller) { onDispose(controller::dispose) }
-    LaunchedEffect(state.loading, state.messages.size, initialUnreadViewportReady) {
+    LaunchedEffect(controller, listState) {
+        snapshotFlow {
+            val oldestVisible = listState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
+            val current = controller.state
+            Triple(oldestVisible, current.messages.size,
+                initialUnreadViewportReady && current.hasOlder && !current.loading && !current.loadingOlder && !current.olderError)
+        }.collect { (oldestVisible, messageCount, canLoad) ->
+            if (messageCount > 0 && oldestVisible >= messageCount - 12 && canLoad) controller.loadOlder()
+        }
+    }
+    LaunchedEffect(state.loading, state.messages.size, state.hasOlder, state.olderError, initialUnreadViewportReady) {
         if (!state.loading && !initialUnreadViewportReady) {
+            if (openingUnreadCount >= state.messages.size && state.hasOlder && !state.olderError) return@LaunchedEffect
             // The divider belongs to the first older/read row (index == unread
             // count), so target that row rather than the last unread message.
             // This keeps both the boundary label and first unread message visible.
@@ -193,10 +214,11 @@ fun RoomChatScreen(
         val newest = state.messages.firstOrNull()?.uuid
         val previous = previousNewestMessageUuid
         if (newest != null && previous != null && newest != previous && initialUnreadViewportReady) {
-            val visibleKey = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? String
-            val wasAtBottom = (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) ||
-                visibleKey == previous
-            if (wasAtBottom) listState.requestScrollToItem(0)
+            // A tall incoming media bubble can push the previous newest row out
+            // of the measured viewport before this effect runs.
+            val wasNearBottom = listState.firstVisibleItemIndex <= 1 ||
+                listState.layoutInfo.visibleItemsInfo.any { it.key == previous }
+            if (wasNearBottom) listState.animateScrollToItem(0)
         }
         previousNewestMessageUuid = newest
     }
@@ -282,6 +304,17 @@ fun RoomChatScreen(
                       }
                       if (room.unread >= state.messages.size && state.messages.isNotEmpty()) {
                           item("all-messages-unread-divider") { ChatUnreadDivider(state.messages.size) }
+                      }
+                      if (state.loadingOlder) item("loading-older-messages") {
+                          Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                              CircularProgressIndicator(Modifier.size(20.dp), color = Gold, strokeWidth = 2.dp)
+                          }
+                      }
+                      if (state.olderError) item("retry-older-messages") {
+                          Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                              Text("Couldn't load older messages · Tap to retry", color = Gold,
+                                  fontSize = 12.sp, modifier = Modifier.clickable { controller.retryOlder() })
+                          }
                       }
                     }
                     if (!initialUnreadViewportReady) RoomChatSkeleton(Modifier.fillMaxSize())

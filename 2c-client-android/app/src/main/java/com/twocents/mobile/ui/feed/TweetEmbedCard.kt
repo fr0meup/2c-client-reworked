@@ -195,7 +195,7 @@ private fun TweetMediaContent(media: List<TweetMedia>) {
     // X multi-image galleries intentionally share the postcard/detail gallery
     // path. It keeps every slide at one measured height instead of allowing
     // each natural image ratio to make a different-height carousel item.
-    if (images.isNotEmpty()) FeedPostMedia(images, compact = true)
+    if (images.isNotEmpty()) FeedPostMedia(images, compact = true, preserveFullImage = images.size == 1)
     media.filter { it.kind != TweetMediaKind.Image }.forEach { item ->
         val actualImageGif = item.kind == TweetMediaKind.Gif && !item.url.contains(".mp4", true) && !item.url.contains(".m3u8", true)
         if (actualImageGif) {

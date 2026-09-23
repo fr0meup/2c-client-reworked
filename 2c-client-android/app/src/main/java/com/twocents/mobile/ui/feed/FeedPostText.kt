@@ -37,6 +37,7 @@ import com.twocents.mobile.ui.common.AppLinkRouter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.twocents.mobile.ui.common.LinkifiedText
+import com.twocents.mobile.ui.common.annotateTickers
 
 private val InlinePattern = Regex(
     "(\\[([^]]+)]\\(([^)\\s]+)\\))|(\\*\\*\\*[\\s\\S]+?\\*\\*\\*)|(\\*\\*[\\s\\S]+?\\*\\*)|(\\*[^*\\n]+?\\*)|((?:https?://|www\\.)[^\\s<>\\[\\]()]+)",
@@ -90,13 +91,14 @@ internal fun FeedPostText(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     maxLines: Int = Int.MAX_VALUE,
+    commentStyle: Boolean = false,
 ) {
     if (text.isBlank()) return
-    val bodySize = if (compact) 13.sp else 15.sp
+    val bodySize = if (commentStyle) 13.5.sp else if (compact) 13.sp else 15.sp
     // Keep automatic wraps tight. Paragraph spacing is inserted separately
     // below, so it must not be baked into every wrapped line.
     val lineHeight = if (compact) 17.sp else 19.sp
-    val bodyColor = Color.White.copy(alpha = if (compact) 0.8f else 0.9f)
+    val bodyColor = Color.White.copy(alpha = if (commentStyle) .9f else if (compact) 0.8f else 0.9f)
     val lines = text.split('\n')
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -198,8 +200,10 @@ internal fun FeedPostText(
 @Composable
 internal fun CommentBodyText(text: String, modifier: Modifier = Modifier) {
     if (text.isBlank()) return
-    if (Regex("(?m)^#{1,6}\\s+").containsMatchIn(text)) {
-        FeedPostText(text, modifier, compact = true)
+    // Only authored formatting switches to the post Markdown renderer; plain
+    // comments retain their current type size and paragraph behavior.
+    if (commentUsesPostFormatting(text)) {
+        FeedPostText(text, modifier, compact = true, commentStyle = true)
         return
     }
     LinkifiedText(
@@ -292,6 +296,7 @@ private fun MarkdownLine(
     maxLines: Int = Int.MAX_VALUE,
 ) {
     val uriHandler = LocalUriHandler.current
+    val rendered = remember(text) { annotateTickers(text) }
     val style = TextStyle(
         color = color,
         fontSize = fontSize,
@@ -299,9 +304,9 @@ private fun MarkdownLine(
         fontStyle = fontStyle,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
     )
-    if (text.getStringAnnotations("URL", 0, text.length).isEmpty()) {
+    if (rendered.getStringAnnotations("URL", 0, rendered.length).isEmpty()) {
         Text(
-            text = text,
+            text = rendered,
             modifier = modifier,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
@@ -309,13 +314,17 @@ private fun MarkdownLine(
         )
     } else {
         ClickableText(
-            text = text,
+            text = rendered,
             modifier = modifier,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
             style = style,
             onClick = { offset ->
-                text.getStringAnnotations("URL", offset, offset).firstOrNull()?.item?.let { raw ->
+                rendered.getStringAnnotations("URL", offset, offset).firstOrNull()?.item?.let { raw ->
+                    if (raw.startsWith("ticker:")) {
+                        com.twocents.mobile.ui.common.TickerNavigation.open(raw.removePrefix("ticker:"))
+                        return@let
+                    }
                     val normalized = when {
                         raw.startsWith("/user/") -> "https://www.twocents.com$raw"
                         raw.startsWith("www.", true) -> "https://$raw"
@@ -327,6 +336,11 @@ private fun MarkdownLine(
         )
     }
 }
+
+private val CommentFormattingPattern = Regex(
+    "(?m)^(?:#{1,6}\\s+|[>│]\\s?|[-•]\\s+)|\\*\\*\\*[^*\\n]+\\*\\*\\*|\\*\\*[^*\\n]+\\*\\*|(?<!\\*)\\*[^*\\n]+\\*(?!\\*)",
+)
+internal fun commentUsesPostFormatting(text: String): Boolean = CommentFormattingPattern.containsMatchIn(text)
 
 private fun compactFeedUrl(raw: String): String {
     if (raw.length <= 48) return raw

@@ -102,12 +102,14 @@ internal class PostDetailController(
         return runCatching {
             val imageUrl = imageUri?.let { uploadCommentImage(it, context) }
             val mentioned = com.twocents.mobile.ui.common.officialMentionText(limitedText.trim(), api, auth)
+            val tickers = com.twocents.mobile.ui.common.tickerSymbols(mentioned.text)
             val created = api.call(
                 "/v1/comments/create",
                 JSONObject()
                     .put("post_uuid", seedPost.uuid)
                     .put("text", formatComposeTextForApi(mentioned.text).ifBlank { "\u200B" } + if (mentioned.metadata.length() > 0) " " else "")
                     .put("mentions", mentioned.metadata)
+                    .apply { if (tickers.isNotEmpty()) put("tickers", JSONArray(tickers)) }
                     .put("in_reply_to_uuid", parentUuid ?: seedPost.uuid)
                     .apply { imageUrl?.let { put("image_url", it) } },
                 auth,

@@ -12,6 +12,7 @@ import com.twocents.mobile.ui.settings.InteractionPreferences
 import com.twocents.mobile.data.VoteRepository
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.CancellationException
 
 private data class UploadedComposeMedia(
     val publicUrl: String,
@@ -28,10 +29,11 @@ suspend fun createComposePost(
     val uploadedMedia = uploadComposeMedia(api, auth, context, draft.mediaUris)
 
     val postType = when {
+        // Official clients identify a quote by type 3 even when it carries media.
+        draft.quotedPost != null -> 3
         draft.option == ComposePostOption.Poll -> 2
         uploadedMedia.any { it.isVideo } -> 10
         uploadedMedia.isNotEmpty() -> 4
-        draft.quotedPost != null -> 3
         draft.option == ComposePostOption.Likert -> 5
         else -> 0
     }
@@ -40,6 +42,8 @@ suspend fun createComposePost(
         .put("mentions", mentioned.metadata)
         .put("version", 1)
         .put("platform", "android")
+    com.twocents.mobile.ui.common.tickerSymbols(mentioned.text).takeIf(List<String>::isNotEmpty)
+        ?.let { meta.put("tickers", JSONArray(it)) }
 
     if (draft.option == ComposePostOption.Poll) {
         meta.put("poll", JSONArray(draft.pollOptions.filter { it.isNotBlank() }))
@@ -55,6 +59,7 @@ suspend fun createComposePost(
         } else {
             val urls = JSONArray(uploadedMedia.map { it.publicUrl })
             meta.put("src", uploadedMedia.first().publicUrl)
+            meta.put("image_url", uploadedMedia.first().publicUrl)
             meta.put("imageUrls", urls)
             meta.put("image_urls", urls)
             if (draft.mediaUris.singleOrNull()?.let { it.startsWith("http://") || it.startsWith("https://") } == true) {
@@ -63,7 +68,19 @@ suspend fun createComposePost(
             }
         }
     }
-    draft.quotedPost?.let { meta.put("quote_post", it.toQuoteJson()) }
+    draft.quotedPost?.let { quoted ->
+        // Use the server's complete post object so nested quotes and metadata
+        // survive on official clients as well as in this client's local model.
+        val original = try {
+            (api.call("/v1/posts/get", JSONObject().put("post_uuid", quoted.uuid), auth) as? JSONObject)
+                ?.optJSONObject("post")
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            null
+        }
+        meta.put("quote_post", original ?: quoted.toQuoteJson())
+    }
 
     val result = api.call(
         method = "/v1/posts/create",
@@ -87,16 +104,19 @@ suspend fun createComposePost(
 
 private fun FeedPost.toQuoteJson(): JSONObject {
     val postMeta = JSONObject()
+        .put("version", 1)
         .put("platform", meta.platform)
         .put("poll", JSONArray(meta.poll))
     if (meta.images.isNotEmpty()) {
         postMeta.put("src", meta.images.first())
+        postMeta.put("image_url", meta.images.first())
         postMeta.put("imageUrls", JSONArray(meta.images))
     }
     meta.videoUrl?.let { postMeta.put("media_type", "video").put("videoUrl", it) }
     meta.link?.let { postMeta.put("link", it) }
     meta.giphyUrl?.let { postMeta.put("giphy_url", it) }
     meta.tweetUrl?.let { postMeta.put("tweet_url", it) }
+    meta.quotePost?.let { postMeta.put("quote_post", it.toQuoteJson()) }
     return JSONObject()
         .put("uuid", uuid)
         .put("created_at", createdAt)

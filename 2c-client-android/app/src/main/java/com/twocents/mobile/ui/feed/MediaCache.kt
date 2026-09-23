@@ -94,7 +94,11 @@ internal object VideoPreviewRepository {
                         val rawRatio = if (width != null && height != null && height > 0f) width / height else null
                         val ratio = rawRatio?.let { if (rotation == 90 || rotation == 270) 1f / it else it }
                         ratio?.let { cacheMediaRatio(uri, it) }
-                        val frame = retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return@runCatching null
+                        // QuickTime uploads sometimes have no decodable frame at t=0.
+                        val frame = retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            ?: retriever.getFrameAtTime(500_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            ?: retriever.getFrameAtTime(1_500_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                            ?: return@runCatching null
                         image.outputStream().buffered().use { frame.compress(Bitmap.CompressFormat.JPEG, 86, it) }
                         ratio?.let { ratioFile.writeText(it.toString()); cacheMediaRatio(uri, it) }
                         CachedVideoPreview(image, ratio)
@@ -134,6 +138,7 @@ private class HttpRangeMediaDataSource(private val uri: String) : MediaDataSourc
     private val chunks = LinkedHashMap<Long, ByteArray>(8, .75f, true)
     private var knownSize = -1L
     private var transferred = 0
+    private val transferBudget = if (Uri.parse(uri).path?.endsWith(".mov", true) == true) 6 * 1024 * 1024 else TransferBudgetBytes
     private var closed = false
 
     override fun getSize(): Long {
@@ -166,8 +171,8 @@ private class HttpRangeMediaDataSource(private val uri: String) : MediaDataSourc
     }
 
     private fun loadChunk(start: Long): ByteArray {
-        if (transferred >= TransferBudgetBytes) throw IOException("Video preview transfer budget reached")
-        val requested = minOf(ChunkBytes, TransferBudgetBytes - transferred)
+        if (transferred >= transferBudget) throw IOException("Video preview transfer budget reached")
+        val requested = minOf(ChunkBytes, transferBudget - transferred)
         val end = start + requested - 1L
         val request = Request.Builder().url(uri).header("Range", "bytes=$start-$end").build()
         client.newCall(request).execute().use { response ->
@@ -186,7 +191,7 @@ private class HttpRangeMediaDataSource(private val uri: String) : MediaDataSourc
             val result = if (count == bytes.size) bytes else bytes.copyOf(count)
             transferred += result.size
             chunks[start] = result
-            while (chunks.size > TransferBudgetBytes / ChunkBytes) chunks.remove(chunks.entries.first().key)
+            while (chunks.size > transferBudget / ChunkBytes) chunks.remove(chunks.entries.first().key)
             return result
         }
     }

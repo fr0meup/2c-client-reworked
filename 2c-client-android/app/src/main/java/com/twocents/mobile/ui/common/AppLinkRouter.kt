@@ -15,6 +15,7 @@ object AppLinkRouter {
         return when (parts.firstOrNull()?.lowercase()) {
             "user" -> parts.getOrNull(1)?.takeIf(String::isNotBlank)?.let { ProfileNavigationBus.open(it); true } ?: false
             "post" -> parts.getOrNull(1)?.takeIf(String::isNotBlank)?.let {
+                TickerOverlayExit.dismissAll()
                 NotificationNavigationBus.openNotifications(postUuid = it, commentUuid = uri.getQueryParameter("comment")); true
             } ?: false
             "rooms", "room" -> parts.getOrNull(1)?.takeIf(String::isNotBlank)?.let { RoomNavigationBus.open(it); true } ?: false

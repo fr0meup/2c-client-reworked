@@ -41,6 +41,7 @@ internal sealed interface ShellOverlayEntry {
 
     data class Post(override val id: Long, val opened: OpenedPost) : ShellOverlayEntry
     data class Quotes(override val id: Long, val post: FeedPost, val controller: FeedController) : ShellOverlayEntry
+    data class Ticker(override val id: Long, val symbol: String) : ShellOverlayEntry
     data class Leaderboard(override val id: Long) : ShellOverlayEntry
     data class Settings(override val id: Long) : ShellOverlayEntry
 }

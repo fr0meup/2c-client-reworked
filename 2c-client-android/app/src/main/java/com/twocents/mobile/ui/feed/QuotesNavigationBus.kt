@@ -8,5 +8,8 @@ internal object QuotesNavigationBus {
     data class Request(val post: FeedPost, val controller: FeedController)
     private val channel = Channel<Request>(Channel.BUFFERED)
     val requests = channel.receiveAsFlow()
-    fun open(post: FeedPost, controller: FeedController) { channel.trySend(Request(post, controller)) }
+    fun open(post: FeedPost, controller: FeedController) {
+        com.twocents.mobile.ui.common.TickerOverlayExit.dismissAll()
+        channel.trySend(Request(post, controller))
+    }
 }

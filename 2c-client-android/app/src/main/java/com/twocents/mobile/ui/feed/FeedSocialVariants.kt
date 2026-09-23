@@ -89,7 +89,7 @@ internal fun FeedPicksCard(
 @Composable
 internal fun FeedQuoteCard(
     quote: FeedPost, onClick: (() -> Unit)? = null, controller: FeedController? = null, authUuid: String? = null,
-    showUserMeta: Boolean = false, embeddedPollVote: Int? = null,
+    showUserMeta: Boolean = false, embeddedPollVote: Int? = null, opaqueSurface: Boolean = false,
     embeddedPollResults: Map<Int, FeedOptionResult>? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -118,7 +118,7 @@ internal fun FeedQuoteCard(
             .padding(top = if (com.twocents.mobile.ui.common.LocalBalancedEmbedSpacing.current) 6.dp else 10.dp,
                 bottom = if (com.twocents.mobile.ui.common.LocalBalancedEmbedSpacing.current) 6.dp else 0.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(CardSurface)
+            .background(if (opaqueSurface) Color(0xFF171713) else CardSurface)
             .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(12.dp),

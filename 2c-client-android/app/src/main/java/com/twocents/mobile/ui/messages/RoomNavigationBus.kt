@@ -10,6 +10,9 @@ object RoomNavigationBus {
     val requests = channel.receiveAsFlow()
 
     fun open(roomUuid: String, targetMessageUuid: String? = null) {
-        if (roomUuid.isNotBlank()) channel.trySend(RoomNavigationRequest(roomUuid, targetMessageUuid))
+        if (roomUuid.isNotBlank()) {
+            com.twocents.mobile.ui.common.TickerOverlayExit.dismissAll()
+            channel.trySend(RoomNavigationRequest(roomUuid, targetMessageUuid))
+        }
     }
 }

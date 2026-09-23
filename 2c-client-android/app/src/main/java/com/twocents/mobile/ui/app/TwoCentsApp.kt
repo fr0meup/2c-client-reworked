@@ -31,7 +31,10 @@ fun TwoCentsApp(
     var auth by remember { mutableStateOf<AuthState?>(null) }
     var checkingStoredAuth by remember { mutableStateOf(true) }
     var startupProgress by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(auth?.userUuid) { com.twocents.mobile.ApiRateLimitNotice.reset() }
+    LaunchedEffect(auth?.userUuid) {
+        com.twocents.mobile.ApiRateLimitNotice.reset()
+        com.twocents.mobile.ui.common.TickerNavigation.clear()
+    }
 
     LaunchedEffect(authStore) {
         startupProgress = 0.78f
@@ -54,11 +57,16 @@ fun TwoCentsApp(
                 com.twocents.mobile.ui.common.LocalContentEmbeds provides remember(auth, rpcApi) {
                     com.twocents.mobile.ui.common.NativeContentRepository(rpcApi, auth!!)
                 },
-            ) { MainShell(
-                auth = auth!!,
-                rpcApi = rpcApi,
-                onLogout = { scope.launch { authStore.clear(); auth = null } },
-            ) }
+                com.twocents.mobile.ui.common.LocalTickerData provides remember(auth, rpcApi) {
+                    com.twocents.mobile.ui.common.TickerData(rpcApi, auth!!)
+                },
+            ) {
+                MainShell(
+                    auth = auth!!,
+                    rpcApi = rpcApi,
+                    onLogout = { scope.launch { authStore.clear(); auth = null } },
+                )
+            }
         }
         AppToastHost(Modifier.align(Alignment.TopCenter))
         com.twocents.mobile.ui.common.RateLimitBanner()

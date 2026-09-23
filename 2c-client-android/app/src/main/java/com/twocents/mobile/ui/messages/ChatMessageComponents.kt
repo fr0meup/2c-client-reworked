@@ -232,6 +232,7 @@ internal fun ChatMessageRow(
                             com.twocents.mobile.ui.common.LinkPreviewCards(
                                 text = message.text,
                                 modifier = Modifier.padding(bottom = if (visibleText.isBlank()) 0.dp else 5.dp),
+                                chatSurface = true,
                             )
                             if (visibleText.isNotBlank()) LinkifiedText(
                                 text = visibleText,
@@ -473,21 +474,23 @@ internal fun RoomTypingIndicator(people: List<TypingPerson>) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        val first = people.first()
-        val identity = first.nickname?.takeIf(String::isNotBlank)
-            ?: "$" + java.text.NumberFormat.getIntegerInstance().format(first.balance)
+        val identities = people.take(3).map { person ->
+            person.nickname?.takeIf(String::isNotBlank)
+                ?: "$" + java.text.NumberFormat.getIntegerInstance().format(person.balance)
+        }
         Text(
-            identity,
+            identities.joinToString(", "),
             color = Color.White.copy(alpha = .72f),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 130.dp),
+            modifier = Modifier.weight(1f, fill = false),
             style = ChatNoPadding,
         )
         Text(
-            (if (people.size == 1) "is typing" else "+${people.size - 1} typing") + ".".repeat(dots),
+            (if (people.size > 3) "+${people.size - 3} are typing"
+                else if (people.size == 1) "is typing" else "are typing") + ".".repeat(dots),
             color = Color.White.copy(alpha = .46f), fontSize = 11.sp, fontStyle = FontStyle.Italic,
             maxLines = 1, overflow = TextOverflow.Ellipsis, style = ChatNoPadding,
         )

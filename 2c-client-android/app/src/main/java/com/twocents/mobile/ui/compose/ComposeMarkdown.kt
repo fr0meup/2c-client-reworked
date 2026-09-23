@@ -12,6 +12,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.TextRange
 import kotlin.random.Random
 import com.twocents.mobile.ui.common.transformMentionMarkup
+import com.twocents.mobile.ui.common.annotateTickers
 
 enum class ComposeMark {
     Bold,
@@ -61,7 +62,8 @@ class ComposeRichTextTransformation(
                 }
             }
         }.toAnnotatedString()
-        return transformMentionMarkup(styled)
+        val visible = transformMentionMarkup(styled)
+        return TransformedText(annotateTickers(visible.text), visible.offsetMapping)
     }
 }
 
