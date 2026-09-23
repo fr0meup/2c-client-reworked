@@ -215,6 +215,7 @@ private fun FeedSingleImage(
     var ratio by remember(uri) { mutableFloatStateOf(synchronized(MediaRatios) { MediaRatios[uri] } ?: 4f / 3f) }
     var bounds by remember(uri) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var failed by remember(uri) { mutableStateOf(false) }
+    var loading by remember(uri) { mutableStateOf(true) }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -234,32 +235,33 @@ private fun FeedSingleImage(
         if (failed) {
             MediaUnavailableSurface(Modifier.width(renderWidth).height(renderHeight)) { failed = false }
         } else {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(uri)
-                    .memoryCacheKey(uri)
-                    .diskCacheKey(uri)
-                    .build(),
-                contentDescription = null,
-                contentScale = if (compact && !preserveFullImage) ContentScale.Crop else ContentScale.Fit,
-                onSuccess = { success ->
-                    val image = success.result.image
-                    if (image.width > 0 && image.height > 0) {
-                        val nextRatio = image.width.toFloat() / image.height.toFloat()
-                        synchronized(MediaRatios) { MediaRatios[uri] = nextRatio }
-                        ratio = nextRatio
-                    }
-                },
-                onError = { failed = true },
-                modifier = Modifier
+            Box(Modifier
                     .width(renderWidth)
                     .height(renderHeight)
                     .graphicsLayer { alpha = if (hidden) 0f else 1f }
                     .clip(RoundedCornerShape(if (compact) 12.dp else 14.dp))
                     .background(MediaBackground)
                     .onGloballyPositioned { bounds = it.boundsInWindow() }
-                    .clickable { bounds?.let { onClick(it.toImageOriginRect()) } },
-            )
+                    .clickable { bounds?.let { onClick(it.toImageOriginRect()) } }) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
+                    contentDescription = null,
+                    contentScale = if (compact && !preserveFullImage) ContentScale.Crop else ContentScale.Fit,
+                    onLoading = { loading = true },
+                    onSuccess = { success ->
+                        loading = false
+                        val image = success.result.image
+                        if (image.width > 0 && image.height > 0) {
+                            val nextRatio = image.width.toFloat() / image.height.toFloat()
+                            synchronized(MediaRatios) { MediaRatios[uri] = nextRatio }
+                            ratio = nextRatio
+                        }
+                    },
+                    onError = { loading = false; failed = true },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                if (loading) MediaLoadingIndicator(Modifier.align(Alignment.Center))
+            }
         }
     }
 }
@@ -385,6 +387,7 @@ private fun GalleryImage(
     var ratio by remember(uri) { mutableFloatStateOf(synchronized(MediaRatios) { MediaRatios[uri] } ?: 1f) }
     var bounds by remember(uri) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var failed by remember(uri) { mutableStateOf(false) }
+    var loading by remember(uri) { mutableStateOf(true) }
     val width = if (preserveFullImage) fullWidth else (if (compact) 160.dp else 280.dp) * ratio.coerceIn(0.2f, 5f) * scale
     val height = if (preserveFullImage) fullWidth / ratio.coerceAtLeast(.2f) else (if (compact) 160.dp else 280.dp) * scale
     val shape = RoundedCornerShape(if (compact) 10.dp else 12.dp)
@@ -405,7 +408,9 @@ private fun GalleryImage(
                 model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
                 contentDescription = null,
                 contentScale = if (preserveFullImage) ContentScale.Fit else ContentScale.FillBounds,
+                onLoading = { loading = true },
                 onSuccess = { success ->
+                    loading = false
                     val image = success.result.image
                     if (image.width > 0 && image.height > 0) {
                         val next = image.width.toFloat() / image.height.toFloat()
@@ -414,9 +419,10 @@ private fun GalleryImage(
                         onRatio(next)
                     }
                 },
-                onError = { failed = true },
+                onError = { loading = false; failed = true },
                 modifier = Modifier.fillMaxSize(),
             )
+            if (loading && !hidden) MediaLoadingIndicator(Modifier.align(Alignment.Center))
         }
     }
 }
@@ -425,16 +431,27 @@ private fun GalleryImage(
 internal fun FeedGif(uri: String) {
     val context = LocalContext.current
     var failed by remember(uri) { mutableStateOf(false) }
+    var loading by remember(uri) { mutableStateOf(true) }
     val modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(220.dp)
     if (failed) {
         MediaUnavailableSurface(modifier) { failed = false }
     } else {
-        AsyncImage(
-            model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            onError = { failed = true },
-            modifier = modifier.clip(RoundedCornerShape(12.dp)).background(MediaBackground),
-        )
+        Box(modifier.clip(RoundedCornerShape(12.dp)).background(MediaBackground)) {
+            AsyncImage(
+                model = ImageRequest.Builder(context).data(uri).memoryCacheKey(uri).diskCacheKey(uri).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                onLoading = { loading = true },
+                onSuccess = { loading = false },
+                onError = { loading = false; failed = true },
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (loading) MediaLoadingIndicator(Modifier.align(Alignment.Center))
+        }
     }
+}
+
+@Composable
+private fun MediaLoadingIndicator(modifier: Modifier = Modifier) {
+    CircularProgressIndicator(modifier.size(20.dp), color = Color.White.copy(alpha = .48f), strokeWidth = 2.dp)
 }

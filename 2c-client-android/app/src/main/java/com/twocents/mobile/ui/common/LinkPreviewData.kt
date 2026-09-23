@@ -3,6 +3,7 @@ package com.twocents.mobile.ui.common
 import android.content.Context
 import android.text.Html
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -88,7 +89,7 @@ internal object LinkPreviewRepository {
                     cached.optString("image").takeIf(String::isNotBlank))
             }
             val result = slots.withPermit {
-                runCatching {
+                try {
                     client.newCall(Request.Builder().url(url)
                         .header("User-Agent", "2c-LinkPreview/1.0")
                         .header("Accept", "text/html,application/xhtml+xml;q=0.9")
@@ -117,7 +118,8 @@ internal object LinkPreviewRepository {
                             parseLinkPreview(buffer.readString(body.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8),
                                 response.request.url.toString())
                         }
-                }.getOrNull()
+                } catch (cancel: CancellationException) { throw cancel }
+                  catch (_: Exception) { null }
             }
             // Preview pictures are also bounded and cached locally. A massive social
             // image must not turn a small text card into a multi-megabyte download.
@@ -127,7 +129,7 @@ internal object LinkPreviewRepository {
             val imageFile = File(directory, "$key.image")
             val image = result?.image?.let { imageUrl ->
                 imageSlots.withPermit {
-                    runCatching {
+                    try {
                         client.newCall(Request.Builder().url(imageUrl).build()).execute().use { response ->
                             require(response.isSuccessful)
                             val body = requireNotNull(response.body)
@@ -143,7 +145,8 @@ internal object LinkPreviewRepository {
                             imageFile.outputStream().use { bytes.copyTo(it) }
                             imageFile.absolutePath
                         }
-                    }.getOrNull()
+                    } catch (cancel: CancellationException) { throw cancel }
+                      catch (_: Exception) { null }
                 }
             }
             val preview = result?.copy(image = image) ?: LinkPreview("", "", null)

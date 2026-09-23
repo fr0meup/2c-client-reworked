@@ -1,6 +1,10 @@
 package com.twocents.mobile.ui.feed
 import com.twocents.mobile.ui.common.AppDropdown
 import com.twocents.mobile.ui.common.AppLoadState
+import com.twocents.mobile.ui.common.LinkPreviewRepository
+import com.twocents.mobile.ui.common.LocalContentEmbeds
+import com.twocents.mobile.ui.common.nativeContentTarget
+import com.twocents.mobile.ui.common.previewLinks
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +69,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 @Composable
 fun FeedContent(
@@ -306,10 +316,11 @@ private fun FeedPaginationSpinner() {
 }
 
 @Composable
-private fun FeedMediaPrewarmer(posts: List<FeedPost>, listState: LazyListState) {
+internal fun FeedMediaPrewarmer(posts: List<FeedPost>, listState: LazyListState) {
     if (posts.isEmpty()) return
     val context = LocalContext.current
     val imageLoader = remember(context) { context.imageLoader }
+    val embeds = LocalContentEmbeds.current
     val density = LocalDensity.current
     val targetWidthPx = with(density) { 380.dp.roundToPx() }
     val targetHeightPx = with(density) { 380.dp.roundToPx() }
@@ -335,12 +346,11 @@ private fun FeedMediaPrewarmer(posts: List<FeedPost>, listState: LazyListState) 
     }
 
     LaunchedEffect(posts, listState, imageLoader, targetWidthPx) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
-            .map { indexes ->
-                if (indexes.isEmpty()) 0..minOf(2, posts.lastIndex) else {
-                    val first = indexes.minOrNull() ?: 0
-                    val last = indexes.maxOrNull() ?: first
-                    maxOf(0, first - 2)..minOf(posts.lastIndex, last + 3)
+        val indices = posts.withIndex().associate { it.value.uuid to it.index }
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { indices[it.key] } }
+            .map { visible ->
+                if (visible.isEmpty()) 0..minOf(2, posts.lastIndex) else {
+                    maxOf(0, visible.min() - 1)..minOf(posts.lastIndex, visible.max() + 2)
                 }
             }
             .distinctUntilChanged()
@@ -352,28 +362,56 @@ private fun FeedMediaPrewarmer(posts: List<FeedPost>, listState: LazyListState) 
                     .flatMap { index -> posts[index].warmableMediaUrls() }
                     .distinct()
                     .take(10)
-                for (url in urls) {
-                    // Await so collectLatest cancels obsolete preloads when the viewport moves.
-                    imageLoader.execute(
-                        ImageRequest.Builder(context)
-                            .data(url)
+                // Two concurrent nearby images warm sooner than ten sequential
+                // downloads; cancellation stops work for rows the user passed.
+                val slots = Semaphore(2)
+                coroutineScope { urls.map { url -> async {
+                    slots.withPermit {
+                        imageLoader.execute(ImageRequest.Builder(context).data(url)
                             .size(targetWidthPx, targetHeightPx)
-                            .memoryCacheKey(url)
-                            .diskCacheKey(url)
-                            .build(),
-                    )
-                    delay(55)
-                }
+                            .memoryCacheKey(url).diskCacheKey(url).build())
+                    }
+                } }.awaitAll() }
+            }
+    }
+
+    LaunchedEffect(posts, listState, embeds) {
+        val indices = posts.withIndex().associate { it.value.uuid to it.index }
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { indices[it.key] } }
+            .map { visible -> (visible.maxOrNull() ?: -1).let { (it + 1)..minOf(posts.lastIndex, it + 2) } }
+            .distinctUntilChanged()
+            .collectLatest { upcoming ->
+                if (!InteractionPreferences.automaticMediaAllowed(context)) return@collectLatest
+                // Metadata is small and disk cached. Only the next two rows are
+                // warmed; native post embeds use their existing account-local cache.
+                val urls = upcoming.flatMap { index ->
+                    listOf(posts[index], posts[index].meta.quotePost).filterNotNull()
+                        .flatMap { previewLinks(it.text, it.meta.link) }
+                }.distinct().take(2)
+                coroutineScope { urls.map { url -> async {
+                    val target = nativeContentTarget(url)
+                    try {
+                        if (target != null && embeds != null) embeds.get(target)
+                        else LinkPreviewRepository.get(context.applicationContext, url)
+                    } catch (cancel: CancellationException) { throw cancel }
+                      catch (_: Exception) { /* The visible card keeps its normal fallback. */ }
+                } }.awaitAll() }
+                val tweetUrl = upcoming.asSequence().mapNotNull { index ->
+                    posts[index].meta.tweetUrl ?: commentTweetUrl(posts[index].meta.link.orEmpty())
+                        ?: commentTweetUrl(posts[index].text)
+                }.firstOrNull()
+                if (tweetUrl != null) prewarmTweetEmbed(tweetUrl)
             }
     }
 }
 
 private fun FeedPost.warmableMediaUrls(): List<String> = buildList {
-    addAll(meta.images.take(2))
+    addAll(meta.images.take(4))
     meta.giphyUrl?.let(::add)
     meta.categoryIconUrl?.let(::add)
     meta.receiptImageUrl?.let(::add)
-    meta.quotePost?.meta?.images?.firstOrNull()?.let(::add)
+    addAll(meta.quotePost?.meta?.images?.take(4).orEmpty())
+    meta.quotePost?.meta?.giphyUrl?.let(::add)
 }
 
 @Composable

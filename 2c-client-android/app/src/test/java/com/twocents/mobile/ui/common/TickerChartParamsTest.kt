@@ -4,6 +4,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TickerChartParamsTest {
+    @Test fun intervalMetricsFollowTheSelectedChart() {
+        val bars = listOf(TickerPoint(1, 10.0, 100.0), TickerPoint(2, 11.0, 120.0), TickerPoint(3, 12.0, 130.0))
+        val daily = TickerPrice(12.0, 2.0, 20.0, 350.0)
+        val week = tickerPeriodStats(TickerPeriod.Week, bars, daily)
+        org.junit.Assert.assertEquals(2.0, week.change!!, 0.0001)
+        org.junit.Assert.assertEquals(20.0, week.percent!!, 0.0001)
+        org.junit.Assert.assertEquals(350.0, week.volume!!, 0.0001)
+        val selected = tickerPeriodStats(TickerPeriod.Week, bars, daily, 1)
+        org.junit.Assert.assertEquals(1.0, selected.change!!, 0.0001)
+        org.junit.Assert.assertEquals(220.0, selected.volume!!, 0.0001)
+        val day = tickerPeriodStats(TickerPeriod.Day, bars, TickerPrice(12.0, 3.0, 33.3, 350.0))
+        org.junit.Assert.assertEquals(3.0, day.change!!, 0.0001)
+        org.junit.Assert.assertEquals(33.333, day.percent!!, 0.001)
+        org.junit.Assert.assertNull(tickerPeriodStats(TickerPeriod.Month, emptyList(), daily).change)
+    }
     private val now = 1_790_184_000_000L
 
     @Test fun shortPeriodsUseTheBackendAggregationCadence() {

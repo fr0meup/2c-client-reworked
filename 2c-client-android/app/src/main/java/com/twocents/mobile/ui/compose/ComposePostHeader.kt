@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,10 +48,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.PlatformTextStyle
@@ -58,16 +58,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import com.twocents.mobile.ui.common.nativeMisspellingUnderlines
 import com.twocents.mobile.ui.common.rememberNativeMisspellings
+import com.twocents.mobile.kotlin.R
 
 private val ComposeSurface = Color(0xFF141410)
 private val BronzeText = Color(0xFF3F1815)
 private val HeaderOutCubic = Easing { fraction -> 1f - (1f - fraction) * (1f - fraction) * (1f - fraction) }
-private const val LOCATION_ICON_URL =
-    "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Flocation-icon.432s1sddmkeug.png&w=48&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"
 
 private val PillImages = mapOf(
     "bronze" to "https://www.twocents.money/pills/bronze2.png",
@@ -138,21 +135,17 @@ fun ComposePostHeader(
                     ComposeNetworthPill(profile = profile, authUuid = authUuid)
                     if (!profile?.gender.isNullOrBlank()) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            GenderGlyph(gender = profile?.gender, modifier = Modifier.size(15.dp))
-                            profile?.age?.let {
+                            GenderGlyph(gender = profile.gender, modifier = Modifier.size(15.dp))
+                            profile.age?.let {
                                 Text(it.toString(), color = Color.White.copy(alpha = 0.4f), fontSize = 14.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
                     if (!profile?.arena.isNullOrBlank()) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current).data(LOCATION_ICON_URL).build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Text(profile?.arena.orEmpty(), color = Color.White.copy(alpha = 0.4f), fontSize = 14.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Image(painterResource(R.drawable.twocents_location), contentDescription = null,
+                                modifier = Modifier.size(20.dp), alpha = .8f)
+                            Text(profile.arena.orEmpty(), color = Color.White.copy(alpha = 0.4f), fontSize = 14.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

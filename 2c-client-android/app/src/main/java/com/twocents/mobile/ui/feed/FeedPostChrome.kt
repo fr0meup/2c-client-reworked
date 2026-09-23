@@ -1,6 +1,7 @@
 package com.twocents.mobile.ui.feed
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -42,24 +42,26 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import kotlinx.coroutines.launch
 import com.twocents.mobile.ui.common.AppHaptics
+import com.twocents.mobile.kotlin.R
 import com.twocents.mobile.ui.common.toUserDisplay
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -76,8 +78,11 @@ private val PostEmerald = Color(0xFF34D399)
 private val PostRose = Color(0xFFF43F5E)
 private val ActionGray = Color(0xFF8E8B85)
 
-private const val IOS_ICON_URL = "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fapple.0xxwgeqy4kw1g.png&w=32&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"
-private const val ANDROID_ICON_URL = "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fandroid.0ujtbb1oilk8l.png&w=32&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"
+// Apple/Android outlines from Font Awesome Free 6 Brands (CC BY 4.0):
+// https://fontawesome.com/license/free. The official APK bundles this font;
+// keeping only two paths avoids loading the whole font for tiny header icons.
+private const val ApplePlatformPath = "M18.24 12.64Q18.19 9.94 20.69 8.46Q19.27 6.5 16.52 6.25Q15.68 6.21 14.85 6.45Q14.01 6.7 13.38 6.94Q12.59 7.24 12.2 7.29Q11.66 7.24 10.82 6.89Q9.64 6.4 8.42 6.3Q6.25 6.35 4.58 7.97Q2.87 9.59 2.77 12.88Q2.77 14.8 3.46 16.86Q3.8 17.79 4.58 19.27Q5.37 20.69 6.45 21.82Q7.53 22.95 8.76 23Q9.54 22.95 10.33 22.61Q11.21 22.17 12.44 22.12Q13.62 22.17 14.46 22.56Q15.24 22.95 16.22 23Q17.4 22.9 18.43 21.87Q19.46 20.79 20.2 19.46Q20.94 18.09 21.23 17.16Q19.02 15.93 18.58 14.41Q18.14 12.93 18.24 12.64ZM15.44 4.58Q16.37 3.36 16.57 2.38Q16.71 1.44 16.62 1Q15.73 1.05 14.8 1.54Q13.92 2.03 13.28 2.72Q11.95 4.19 12.05 6.25Q13.96 6.3 15.44 4.58Z"
+private const val AndroidPlatformPath = "M17.08 15.07Q16.24 15 16.16 14.16Q16.24 13.32 17.08 13.24Q17.88 13.32 18 14.16Q17.88 15 17.08 15.07ZM6.92 15.07Q6.12 15 6 14.16Q6.12 13.32 6.92 13.24Q7.76 13.32 7.84 14.16Q7.76 15 6.92 15.07ZM17.39 9.54 19.22 6.37Q19.33 6.18 19.26 5.98Q19.14 5.79 18.91 5.79Q18.68 5.79 18.57 5.98L16.7 9.23Q14.44 8.2 12 8.2Q9.56 8.2 7.3 9.23L5.43 5.98Q5.32 5.79 5.09 5.79Q4.86 5.79 4.74 5.98Q4.67 6.18 4.78 6.37L6.61 9.54Q4.21 10.87 2.76 13.13Q1.27 15.34 1 18.21H23Q22.73 15.34 21.24 13.13Q19.79 10.87 17.39 9.54Z"
 
 @Composable
 internal fun FeedPostHeader(
@@ -149,21 +154,21 @@ internal fun FeedPostHeader(
 
 @Composable
 private fun FeedPlatformIcon(platform: String?) {
-    val context = LocalContext.current
-    val url = when (platform) {
-        "ios" -> IOS_ICON_URL
-        "android" -> ANDROID_ICON_URL
-        else -> null
+    // These glyphs are local: the old Next.js asset URLs expire on web deploys.
+    when (platform?.lowercase(Locale.ROOT)) {
+        "ios" -> FeedBrandPlatformIcon(ApplePlatformPath, "iOS")
+        "android" -> FeedBrandPlatformIcon(AndroidPlatformPath, "Android")
+        else -> FeedWebIcon(Modifier.size(13.dp))
     }
-    if (url != null) {
-        AsyncImage(
-            model = ImageRequest.Builder(context).data(url).memoryCacheKey("platform-$platform").build(),
-            contentDescription = platform,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.size(13.5.dp),
-        )
-    } else {
-        FeedWebIcon(Modifier.size(13.dp))
+}
+
+@Composable
+private fun FeedBrandPlatformIcon(pathData: String, label: String) {
+    val path = remember(pathData) { PathParser().parsePathString(pathData).toPath() }
+    Canvas(Modifier.size(14.dp).semantics { contentDescription = label }) {
+        withTransform({ scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) }) {
+            drawPath(path, Color(0xFFA6AFB1))
+        }
     }
 }
 
@@ -349,14 +354,8 @@ internal fun UserMetaPill(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    val context = LocalContext.current
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(LOCATION_ICON_URL).memoryCacheKey("feed-location-icon").build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(if (compact) 16.dp else 18.dp),
-                        alpha = 0.8f,
-                    )
+                    Image(painterResource(R.drawable.twocents_location), contentDescription = null,
+                        modifier = Modifier.size(if (compact) 16.dp else 18.dp), alpha = .8f)
                     Text(
                         user.arena.orEmpty(),
                         color = Color.White.copy(alpha = 0.75f),
@@ -447,7 +446,6 @@ private fun VoteArrow(up: Boolean, active: Boolean, modifier: Modifier) {
     val color = if (active) if (up) PostEmerald else PostRose else ActionGray
     FeedVoteIcon(up, modifier.padding(horizontal = 5.dp, vertical = 10.dp), color)
 }
-
 internal fun feedTimeAgo(raw: String): String {
     if (raw.isBlank()) return ""
     val past = runCatching { Instant.parse(raw) }.getOrElse {
@@ -463,6 +461,3 @@ internal fun feedTimeAgo(raw: String): String {
         else -> "${seconds / 31_536_000}y"
     }
 }
-
-
-private const val LOCATION_ICON_URL = "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Flocation-icon.432s1sddmkeug.png&w=48&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"

@@ -28,6 +28,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.twocents.mobile.ui.feed.FeedPostCard
 import com.twocents.mobile.ui.feed.FeedController
 import com.twocents.mobile.ui.feed.FeedPost
+import com.twocents.mobile.ui.feed.FeedMediaPrewarmer
 import com.twocents.mobile.ui.feed.FlatPostComment
 import com.twocents.mobile.ui.feed.PostCommentRow
 import kotlinx.coroutines.CancellationException
@@ -53,6 +54,7 @@ internal fun TickerSheet(
     var closing by remember(symbol) { mutableStateOf(false) }
     val threshold = with(LocalDensity.current) { 65.dp.toPx() }
     val listState = rememberLazyListState()
+    var returnPosition by remember(symbol) { mutableStateOf<Pair<Int, Int>?>(null) }
     val feed = remember(data, symbol) { data?.let { TickerFeed(it, it.feedController(context)) } }
     var period by remember(symbol) { mutableStateOf(TickerPeriod.Day) }
     var chartRetry by remember(symbol) { mutableIntStateOf(0) }
@@ -68,8 +70,18 @@ internal fun TickerSheet(
         scope.launch { motion.animateTo(0f, tween(220)); onDismiss() }
     }
     fun openPost(postUuid: String, commentUuid: String? = null) {
+        // The dialog's LazyColumn is detached while the post is above it.
+        // Keep a separate anchor because a detached list can remeasure at row zero.
+        returnPosition = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
         val knownPost = feed?.posts?.state?.posts?.firstOrNull { it.uuid == postUuid }
         onOpenPost(knownPost, feed?.posts, postUuid, commentUuid)
+    }
+
+    LaunchedEffect(visible) {
+        if (visible) returnPosition?.let { (index, offset) ->
+            listState.scrollToItem(index, offset)
+            returnPosition = null
+        }
     }
 
     LaunchedEffect(symbol) { motion.animateTo(1f, tween(220)) }
@@ -96,6 +108,7 @@ internal fun TickerSheet(
                 if (last != null && last >= total - 3) feed.loadMore(symbol)
             }
     }
+    if (visible) FeedMediaPrewarmer(feed?.posts?.state?.posts.orEmpty(), listState)
 
     // Keeping the composable alive retains LazyListState and its loaded pages;
     // only the dialog window is removed while a nested destination is on top.

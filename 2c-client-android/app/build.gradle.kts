@@ -38,8 +38,8 @@ android {
         applicationId = "com.twocents.mobile.kotlin"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
-        versionName = "0.2.8"
+        versionCode = 20
+        versionName = "0.2.9"
 
         // Direct APK distribution does not receive Play's ABI splits. Keep only
         // the 64-bit ARM binaries used by current Android phones, rather than

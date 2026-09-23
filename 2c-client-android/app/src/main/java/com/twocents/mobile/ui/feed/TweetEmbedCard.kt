@@ -27,7 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -59,19 +62,27 @@ private data class NativeTweet(
 
 private object TweetRepository {
     private val client = OkHttpClient.Builder().callTimeout(12, TimeUnit.SECONDS).build()
+    private val locks = Array(16) { Mutex() }
     private val cache = object : LinkedHashMap<String, NativeTweet>(48, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, NativeTweet>?) = size > 48
     }
 
-    suspend fun get(id: String): NativeTweet? = synchronized(cache) { cache[id] } ?: withContext(Dispatchers.IO) {
-        runCatching {
-            client.newCall(Request.Builder().url("https://api.fxtwitter.com/status/$id").header("Accept", "application/json").build())
-                .execute().use { response ->
-                    if (!response.isSuccessful) return@use null
-                    JSONObject(response.body?.string().orEmpty()).optJSONObject("tweet")?.let(::parseTweet)
+    suspend fun get(id: String): NativeTweet? = synchronized(cache) { cache[id] }
+        ?: locks[(id.hashCode() and Int.MAX_VALUE) % locks.size].withLock {
+            synchronized(cache) { cache[id] } ?: withContext(Dispatchers.IO) {
+                try {
+                    client.newCall(Request.Builder().url("https://api.fxtwitter.com/status/$id").header("Accept", "application/json").build())
+                        .execute().use { response ->
+                            if (!response.isSuccessful) return@use null
+                            JSONObject(response.body?.string().orEmpty()).optJSONObject("tweet")?.let(::parseTweet)
+                        }
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                    null
                 }
-        }.getOrNull()?.also { synchronized(cache) { cache[id] = it } }
-    }
+            }?.also { synchronized(cache) { cache[id] = it } }
+        }
 
     private fun parseTweet(tweet: JSONObject, depth: Int = 0): NativeTweet {
         val author = tweet.optJSONObject("author") ?: JSONObject()
@@ -101,6 +112,11 @@ private object TweetRepository {
             quote = if (depth < 2) tweet.optJSONObject("quote")?.let { parseTweet(it, depth + 1) } else null,
         )
     }
+}
+
+/** Warm the same shared cache the card reads, bounded by the caller's viewport. */
+internal suspend fun prewarmTweetEmbed(url: String) {
+    TweetIdPattern.find(url)?.groupValues?.getOrNull(1)?.let { TweetRepository.get(it) }
 }
 
 @Composable

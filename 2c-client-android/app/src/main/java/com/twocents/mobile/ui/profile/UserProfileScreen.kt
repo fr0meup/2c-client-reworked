@@ -131,14 +131,16 @@ fun UserProfileContent(
             .distinctUntilChanged()
             .collect { shouldLoad -> if (shouldLoad) controller.loadMore(tab) }
     }
-    LaunchedEffect(tab, state.posts, state.comments, state.votedPosts) {
+    // Share the viewport-bounded image/quote/embed warmer with the feed. The
+    // old first-six-only pass never prepared media after scrolling further.
+    if (tab == ProfileTab.Posts || tab == ProfileTab.Votes) {
+        FeedMediaPrewarmer(if (tab == ProfileTab.Posts) state.posts else state.votedPosts, listState)
+    }
+    LaunchedEffect(tab, state.comments) {
+        if (tab != ProfileTab.Comments) return@LaunchedEffect
         if (!InteractionPreferences.automaticMediaAllowed(context)) return@LaunchedEffect
         val size = with(density) { 380.dp.roundToPx() }
-        val urls = when (tab) {
-            ProfileTab.Posts -> state.posts.flatMap(FeedPost::profileWarmableMediaUrls)
-            ProfileTab.Comments -> state.comments.flatMap { it.mediaUrls }
-            ProfileTab.Votes -> state.votedPosts.flatMap(FeedPost::profileWarmableMediaUrls)
-        }.distinct().take(6)
+        val urls = state.comments.flatMap { it.mediaUrls }.distinct().take(6)
         // Queue the active tab's first screen immediately. Coil still owns request
         // coalescing and both cache layers, so this removes reveal latency without
         // duplicating downloads or retaining decoded bitmaps in profile state.
@@ -148,14 +150,6 @@ fun UserProfileContent(
                     .memoryCacheKey(url).diskCacheKey(url).build(),
             )
             delay(12)
-        }
-    }
-    LaunchedEffect(tab, state.posts, state.votedPosts) {
-        if (!InteractionPreferences.automaticMediaAllowed(context)) return@LaunchedEffect
-        val posts = if (tab == ProfileTab.Votes) state.votedPosts else if (tab == ProfileTab.Posts) state.posts else emptyList()
-        posts.mapNotNull { it.meta.videoUrl }.distinct().take(4).forEach { url ->
-            VideoPreviewRepository.prepare(context.applicationContext, url)
-            delay(15)
         }
     }
     LaunchedEffect(state.user) {
@@ -303,13 +297,4 @@ fun UserProfileContent(
             },
         )
     }
-}
-
-private fun FeedPost.profileWarmableMediaUrls(): List<String> = buildList {
-    addAll(meta.images.take(2))
-    meta.giphyUrl?.let(::add)
-    meta.categoryIconUrl?.let(::add)
-    meta.receiptImageUrl?.let(::add)
-    meta.quotePost?.meta?.images?.firstOrNull()?.let(::add)
-    meta.quotePost?.meta?.giphyUrl?.let(::add)
 }

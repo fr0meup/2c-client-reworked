@@ -83,9 +83,6 @@ private val PostEmerald = Color(0xFF34D399)
 private val PostRose = Color(0xFFF43F5E)
 private val ActionGray = Color(0xFF8E8B85)
 
-private const val IOS_ICON_URL = "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fapple.0xxwgeqy4kw1g.png&w=32&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"
-private const val ANDROID_ICON_URL = "https://www.twocents.money/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fandroid.0ujtbb1oilk8l.png&w=32&q=75&dpl=dpl_5ovAARAu8zMP9MtrCL9RTcRsDq7b"
-
 @Composable
 internal fun FeedPostCard(
     post: FeedPost,

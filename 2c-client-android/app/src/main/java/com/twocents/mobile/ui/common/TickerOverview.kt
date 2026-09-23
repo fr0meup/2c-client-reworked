@@ -82,10 +82,10 @@ internal fun TickerOverview(
     var selectedPoint by remember(symbol, period, points) { mutableIntStateOf(-1) }
     var aboutExpanded by remember(symbol) { mutableStateOf(false) }
     val current = points.getOrNull(selectedPoint)
-    val shownPrice = current?.close ?: price?.price ?: points.lastOrNull()?.close
-    val baseline = if (current != null || price?.price == null) points.firstOrNull()?.close else price.price.minus(price.change ?: 0.0)
-    val change = if (current != null || price?.price == null) shownPrice?.let { it - (baseline ?: it) } else price.change
-    val percent = if ((current != null || price?.price == null) && baseline != null && baseline != 0.0) change?.div(baseline)?.times(100) else price?.changePercent
+    val stats = remember(period, points, price, selectedPoint) { tickerPeriodStats(period, points, price, selectedPoint) }
+    val shownPrice = stats.price
+    val change = stats.change
+    val percent = stats.percent
     val positive = (change ?: 0.0) >= 0.0
     val accent = if (positive) Green else Red
     val chartAccent = if ((points.lastOrNull()?.close ?: 0.0) >= (points.firstOrNull()?.close ?: 0.0)) Green else Red
@@ -96,7 +96,7 @@ internal fun TickerOverview(
         Spacer(Modifier.height(3.dp))
         if (change != null && percent != null) {
             val sign = if (positive) "+" else ""
-            val volume = (current?.volume ?: price?.volume)?.let { "   Vol: ${compactNumber(it)}" }
+            val volume = stats.volume?.let { "   Vol: ${compactNumber(it)}" }
             Text("$sign${currencyPrice(change)} ($sign${"%.2f".format(Locale.US, percent)}%)${volume.orEmpty()}",
                 color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         } else Text("Market data unavailable", color = Muted, fontSize = 12.sp)

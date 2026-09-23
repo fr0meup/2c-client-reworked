@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.twocents.mobile.ui.settings.InteractionPreferences
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.File
 
 /** Same cached card in feed/detail, comments and chat; text remains selectable separately. */
 @Composable
@@ -43,6 +44,7 @@ private fun LinkPreviewCard(url: String) {
     val handler = LocalUriHandler.current
     val wifiOnly = InteractionPreferences.wifiOnlyMedia(context)
     var preview by remember(url) { mutableStateOf<LinkPreview?>(null) }
+    var imageFailed by remember(url, preview?.image) { mutableStateOf(false) }
     LaunchedEffect(url, wifiOnly) {
         if (InteractionPreferences.automaticMediaAllowed(context)) {
             preview = LinkPreviewRepository.get(context.applicationContext, url) { metadata ->
@@ -56,8 +58,10 @@ private fun LinkPreviewCard(url: String) {
         .clickable {
             if (!AppLinkRouter.open(url)) runCatching { handler.openUri(url) }
         }) {
-        preview?.image?.let { image ->
-            AsyncImage(image, null, Modifier.fillMaxWidth().height(140.dp), contentScale = ContentScale.Crop)
+        preview?.image?.takeUnless { imageFailed }?.let { image ->
+            // A stale preview image must collapse to the usable text card.
+            AsyncImage(File(image), null, Modifier.fillMaxWidth().height(140.dp),
+                contentScale = ContentScale.Crop, onError = { imageFailed = true })
         }
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(preview?.title?.ifBlank { null } ?: url.toHttpUrlOrNull()?.host.orEmpty(),

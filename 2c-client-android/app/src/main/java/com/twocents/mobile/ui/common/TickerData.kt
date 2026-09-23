@@ -33,6 +33,21 @@ internal data class TickerPrice(
 )
 
 internal data class TickerPoint(val time: Long, val close: Double, val volume: Double? = null)
+internal data class TickerPeriodStats(val price: Double?, val change: Double?, val percent: Double?, val volume: Double?)
+
+/** Chart bars own interval metrics; only the 1D baseline uses yesterday's close. */
+internal fun tickerPeriodStats(period: TickerPeriod, points: List<TickerPoint>, snapshot: TickerPrice?, selectedIndex: Int = -1): TickerPeriodStats {
+    if (points.isEmpty()) return if (period == TickerPeriod.Day)
+        TickerPeriodStats(snapshot?.price, snapshot?.change, snapshot?.changePercent, snapshot?.volume)
+    else TickerPeriodStats(null, null, null, null)
+    val end = selectedIndex.takeIf { it in points.indices } ?: points.lastIndex
+    val shown = points[end].close
+    val baseline = if (period == TickerPeriod.Day && snapshot?.price != null && snapshot.change != null)
+        snapshot.price - snapshot.change else points.first().close
+    val change = shown - baseline
+    val volume = points.asSequence().take(end + 1).mapNotNull(TickerPoint::volume).sum().takeIf { it > 0.0 }
+    return TickerPeriodStats(shown, change, if (baseline != 0.0) change / baseline * 100.0 else null, volume)
+}
 internal data class TickerCommentsPage(
     val comments: List<PostComment>,
     val votes: Map<String, Int>,
