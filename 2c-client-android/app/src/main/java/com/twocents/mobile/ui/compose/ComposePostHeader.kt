@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -169,8 +171,9 @@ fun ComposePostHeader(
                     value = title,
                     onValueChange = { onTitleChange(it.take(150)) },
                     modifier = Modifier.weight(1f)
-                        .nativeMisspellingUnderlines(titleLayout, titleMisspellings)
-                        .padding(top = 6.dp, bottom = 2.dp),
+                        .padding(top = 6.dp, bottom = 2.dp)
+                        .horizontalScroll(rememberScrollState())
+                        .nativeMisspellingUnderlines(titleLayout, titleMisspellings),
                     singleLine = true,
                     textStyle = TextStyle(
                         color = Color.White,
@@ -211,7 +214,7 @@ fun ComposePostHeader(
 }
 
 @Composable
-private fun InlineDismissControl(
+internal fun InlineDismissControl(
     expanded: Boolean,
     onExpand: () -> Unit,
     onConfirm: () -> Unit,

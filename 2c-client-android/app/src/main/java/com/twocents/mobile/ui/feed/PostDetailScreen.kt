@@ -120,16 +120,25 @@ internal fun PostDetailScreen(
     BackHandler(enabled = navigationEnabled, onBack = onBack)
     val controller = remember(seedPost.uuid, api, auth) { PostDetailController(api, auth, seedPost) }
     val state = controller.state
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val listState = rememberLazyListState()
     var sort by remember { mutableStateOf(CommentSort.Top) }
     var replyTarget by remember { mutableStateOf<PostComment?>(null) }
+    var threadAnchorUuid by remember(seedPost.uuid) { mutableStateOf<String?>(null) }
+    var threadTargetUuid by remember(seedPost.uuid) { mutableStateOf<String?>(null) }
     var highlightedCommentUuid by remember(targetCommentUuid) { mutableStateOf(targetCommentUuid) }
     var targetCommentHandled by remember(targetCommentUuid) { mutableStateOf(false) }
     val orderedRows = remember(state.commentOrderGeneration, sort) { flattenPostComments(state.comments, sort) }
     val currentComments = remember(state.comments) { state.comments.associateBy(PostComment::uuid) }
-    val rows = orderedRows.map { row -> row.copy(comment = currentComments[row.comment.uuid] ?: row.comment) }
+    val rows = orderedRows.map { row ->
+        row.copy(
+            comment = currentComments[row.comment.uuid] ?: row.comment,
+            parent = row.parent?.let { currentComments[it.uuid] ?: it },
+        )
+    }
+    val threadIndex = remember(rows) { CommentThreadIndex(rows) }
+    val threadPage = remember(threadIndex) { threadIndex.page() }
+    val visibleRows = threadPage.rows
     val sourceState = sourceController.state
     val sourcePost = sourceState.posts.firstOrNull { it.uuid == seedPost.uuid }
     val sourceVote = sourceState.postVotes[seedPost.uuid]
@@ -145,10 +154,17 @@ internal fun PostDetailScreen(
         // snapshot to the originating feed before this detail screen is dismissed.
         state.post?.let(sourceController::reconcilePostSnapshot)
     }
-    LaunchedEffect(targetCommentUuid, state.loadingComments, rows) {
+    LaunchedEffect(targetCommentUuid, state.loadingComments, threadIndex) {
         if (targetCommentHandled || state.loadingComments) return@LaunchedEffect
         val target = targetCommentUuid ?: return@LaunchedEffect
-        val rowIndex = rows.indexOfFirst { it.comment.uuid == target }
+        val path = threadIndex.pathTo(target)
+        if (path.isNotEmpty()) {
+            threadAnchorUuid = path.last()
+            threadTargetUuid = target
+            targetCommentHandled = true
+            return@LaunchedEffect
+        }
+        val rowIndex = visibleRows.indexOfFirst { it.comment.uuid == target }
         if (rowIndex < 0) return@LaunchedEffect
         kotlinx.coroutines.delay(120)
         val contextOffset = with(density) { 112.dp.roundToPx() }
@@ -160,7 +176,7 @@ internal fun PostDetailScreen(
     }
     LaunchedEffect(replyTarget?.uuid) {
         val target = replyTarget ?: return@LaunchedEffect
-        val rowIndex = rows.indexOfFirst { it.comment.uuid == target.uuid }
+        val rowIndex = visibleRows.indexOfFirst { it.comment.uuid == target.uuid }
         if (rowIndex < 0) return@LaunchedEffect
         // Let the IME begin resizing first, then keep the author pill and as much
         // of the replied-to comment as possible above the composer.
@@ -271,7 +287,7 @@ internal fun PostDetailScreen(
 
                 if (state.loadingComments && state.comments.isEmpty()) {
                     items(4, key = { "comment-skeleton-$it" }) { CommentSkeleton() }
-                } else if (rows.isEmpty()) {
+                } else if (visibleRows.isEmpty()) {
                     item(key = "comments-empty") {
                         Text(
                             "Be the first to share your twocents",
@@ -282,12 +298,17 @@ internal fun PostDetailScreen(
                         )
                     }
                 } else {
-                    items(rows, key = { it.comment.uuid }, contentType = { "comment-${it.depth.coerceAtMost(5)}" }) { row ->
+                    items(visibleRows, key = { it.comment.uuid }, contentType = { "comment-${it.depth}" }) { row ->
                         PostCommentRow(
                             row = row,
                             vote = state.commentVotes[row.comment.uuid] ?: 0,
                             alias = state.aliases[row.comment.authorUuid] ?: row.comment.author.alias,
-                            onReply = { if (row.depth < 5) replyTarget = row.comment },
+                            onReply = { replyTarget = row.comment },
+                            moreReplyCount = threadPage.moreReplies[row.comment.uuid] ?: 0,
+                            onMoreReplies = {
+                                threadTargetUuid = null
+                                threadAnchorUuid = row.comment.uuid
+                            },
                             onVote = { direction -> com.twocents.mobile.ui.common.AppBackgroundTasks.mutations.launch { controller.toggleCommentVote(row.comment.uuid, direction) } },
                             highlighted = row.comment.uuid == highlightedCommentUuid,
                             ownComment = row.comment.authorUuid == auth.userUuid,
@@ -310,6 +331,18 @@ internal fun PostDetailScreen(
             replyTarget = replyTarget,
             onCancelReply = { replyTarget = null },
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    threadAnchorUuid?.let { anchor ->
+        PostCommentThreadSheet(
+            index = threadIndex,
+            initialAnchorUuid = anchor,
+            targetCommentUuid = threadTargetUuid,
+            controller = controller,
+            api = api,
+            auth = auth,
+            onDismiss = { threadAnchorUuid = null; threadTargetUuid = null },
+            visible = navigationEnabled,
         )
     }
 }

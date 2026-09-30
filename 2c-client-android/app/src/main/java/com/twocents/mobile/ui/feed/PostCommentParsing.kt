@@ -21,16 +21,30 @@ internal fun flattenPostComments(comments: List<PostComment>, sort: CommentSort)
         CommentSort.Networth -> items.sortedWith(compareByDescending<PostComment> { it.author.balance }.thenByDescending { it.upvoteCount })
         CommentSort.Top -> items.sortedWith(compareByDescending<PostComment> { it.upvoteCount }.thenBy { it.createdAt })
     }
-    fun visit(parent: String?, depth: Int, ancestorContinuations: List<Boolean>) {
-        val children = sorted(byParent[parent].orEmpty())
-        children.forEachIndexed { index, comment ->
-            if (!visited.add(comment.uuid)) return@forEachIndexed
-            val isLast = index == children.lastIndex
-            rows += FlatPostComment(comment, depth, isLast, ancestorContinuations)
-            visit(comment.uuid, depth + 1, ancestorContinuations + !isLast)
+    data class Pending(
+        val comment: PostComment,
+        val parent: PostComment?,
+        val depth: Int,
+        val isLast: Boolean,
+        val rootUuid: String,
+        val continuations: List<Boolean>,
+    )
+    val pending = java.util.ArrayDeque<Pending>()
+    fun enqueueChildren(parent: PostComment?, depth: Int, rootUuid: String? = null, continuations: List<Boolean> = emptyList()) {
+        val children = sorted(byParent[parent?.uuid].orEmpty())
+        for (index in children.indices.reversed()) {
+            val child = children[index]
+            pending.addLast(Pending(child, parent, depth, index == children.lastIndex, rootUuid ?: child.uuid, continuations))
         }
     }
-    visit(null, 0, emptyList())
+    enqueueChildren(null, 0)
+    while (!pending.isEmpty()) {
+        val item = pending.removeLast()
+        if (!visited.add(item.comment.uuid)) continue
+        rows += FlatPostComment(item.comment, item.depth, item.isLast, item.parent, item.rootUuid, item.continuations)
+        // Use an explicit stack so very deep threads cannot overflow the call stack.
+        enqueueChildren(item.comment, item.depth + 1, item.rootUuid, (item.continuations + !item.isLast).takeLast(4))
+    }
     return rows
 }
 

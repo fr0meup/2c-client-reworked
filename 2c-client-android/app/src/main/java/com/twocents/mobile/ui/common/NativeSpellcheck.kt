@@ -39,6 +39,8 @@ internal fun rememberNativeMisspellings(text: String): List<IntRange> {
     var session by remember { mutableStateOf<SpellCheckerSession?>(null) }
     var requestSequence by remember { mutableIntStateOf(0) }
     var misspellings by remember { mutableStateOf(emptyList<IntRange>()) }
+    var checkedText by remember { mutableStateOf("") }
+    var requestedText by remember { mutableStateOf("") }
 
     DisposableEffect(context) {
         val manager = context.getSystemService(Context.TEXT_SERVICES_MANAGER_SERVICE) as? TextServicesManager
@@ -65,8 +67,9 @@ internal fun rememberNativeMisspellings(text: String): List<IntRange> {
                 mainHandler.post {
                     // Suggestions carry the TextInfo sequence when at least one
                     // word is returned; reject stale responses after fast typing.
-                    if (responseSequence == null || responseSequence == requestSequence) {
+                    if ((responseSequence == null || responseSequence == requestSequence) && requestedText == currentText) {
                         misspellings = ranges.filter { it.first < currentText.length }
+                        checkedText = requestedText
                     }
                 }
             }
@@ -82,16 +85,18 @@ internal fun rememberNativeMisspellings(text: String): List<IntRange> {
     }
 
     LaunchedEffect(text, session) {
+        requestSequence += 1
         if (text.isBlank()) {
             misspellings = emptyList()
             return@LaunchedEffect
         }
         delay(320)
         val checker = session ?: return@LaunchedEffect
-        requestSequence += 1
+        requestedText = text
         checker.getSentenceSuggestions(arrayOf(TextInfo(text, 0, requestSequence)), 5)
     }
-    return misspellings
+    // Offset ranges belong to one exact text snapshot, never the next edit.
+    return if (checkedText == text) misspellings else emptyList()
 }
 
 /** Draws compact native-style red waves under the ranges reported by Android. */

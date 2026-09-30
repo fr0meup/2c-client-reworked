@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
@@ -185,6 +187,7 @@ internal fun RoomComposer(
                 value = input,
                 onValueChange = onInput,
                 modifier = Modifier.weight(1f).heightIn(max = 100.dp)
+                    .verticalScroll(rememberScrollState())
                     .nativeMisspellingUnderlines(inputLayout, misspellings),
                 textStyle = TextStyle(color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, platformStyle = PlatformTextStyle(includeFontPadding = false)),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),

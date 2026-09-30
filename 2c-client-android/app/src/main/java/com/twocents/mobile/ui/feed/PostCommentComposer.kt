@@ -33,6 +33,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
@@ -52,8 +54,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -106,6 +109,13 @@ private val DetailGold = Color(0xFFC8A44D)
 private val DetailEmerald = Color(0xFF34D399)
 private val DetailRose = Color(0xFFF43F5E)
 
+/** Hoist a sheet's editor state so navigation and background sends share the same draft. */
+@androidx.compose.runtime.Stable
+internal class CommentComposerDraft {
+    val editor = mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(""))
+    val imageUri = mutableStateOf<String?>(null)
+}
+
 @Composable
 internal fun CommentComposer(
     controller: PostDetailController,
@@ -115,21 +125,25 @@ internal fun CommentComposer(
     replyTarget: PostComment?,
     onCancelReply: () -> Unit,
     modifier: Modifier = Modifier,
+    draft: CommentComposerDraft? = null,
 ) {
     val state = controller.state
     val context = LocalContext.current
     val view = LocalView.current
-    val scope = rememberCoroutineScope()
+    val currentReplyTarget by rememberUpdatedState(replyTarget)
+    val currentOnCancelReply by rememberUpdatedState(onCancelReply)
     val keyboard = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
-    var editor by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+    var editor by (draft?.editor ?: rememberSaveable(stateSaver = androidx.compose.ui.text.input.TextFieldValue.Saver) {
+        mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(""))
+    })
     val text = editor.text
     var editorLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val visibleEditorText = remember(text) {
         MentionVisualTransformation.filter(AnnotatedString(text)).text.text
     }
     val misspellings = rememberNativeMisspellings(visibleEditorText)
-    var imageUri by remember { mutableStateOf<String?>(null) }
+    var imageUri by (draft?.imageUri ?: rememberSaveable { mutableStateOf<String?>(null) })
     var imagePreviewOpen by remember { mutableStateOf(false) }
     var gifPickerOpen by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -287,7 +301,10 @@ internal fun CommentComposer(
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrectEnabled = true),
                 visualTransformation = MentionVisualTransformation,
                 onTextLayout = { editorLayout = it },
-                modifier = Modifier.weight(1f).focusRequester(focusRequester).padding(vertical = 6.dp)
+                // Scroll the full text layout and its underlines together. An outer
+                // underline overlay cannot follow BasicTextField's internal scroller.
+                modifier = Modifier.weight(1f).focusRequester(focusRequester)
+                    .verticalScroll(rememberScrollState()).padding(vertical = 6.dp)
                     .nativeMisspellingUnderlines(editorLayout, misspellings),
                 decorationBox = { inner ->
                     Box {
@@ -322,7 +339,9 @@ internal fun CommentComposer(
                             if (controller.createComment(submittedText, submittedReply, submittedImage, context.applicationContext)) {
                                 if (editor.text == submittedText) editor = androidx.compose.ui.text.input.TextFieldValue("")
                                 if (imageUri == submittedImage) imageUri = null
-                                scope.launch { if (replyTarget?.uuid == submittedReply) onCancelReply() }
+                                // Clearing a submitted reply needs no UI frame clock
+                                // and must still finish while its sheet is hidden.
+                                if (currentReplyTarget?.uuid == submittedReply) currentOnCancelReply()
                             }
                         }
                     },

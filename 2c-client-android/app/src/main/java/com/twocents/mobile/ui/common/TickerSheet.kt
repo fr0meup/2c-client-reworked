@@ -175,7 +175,7 @@ internal fun TickerSheet(
                                     color = Gold.copy(alpha = .78f), fontSize = 11.sp, maxLines = 1)
                             }
                             PostCommentRow(
-                                row = FlatPostComment(comment, 0, true, emptyList()),
+                                row = FlatPostComment(comment, 0, true),
                                 vote = feed.commentVotes[comment.uuid] ?: 0,
                                 alias = feed.posts.state.aliases[comment.authorUuid] ?: comment.author.alias,
                                 onReply = { openPost(comment.postUuid, comment.uuid) },

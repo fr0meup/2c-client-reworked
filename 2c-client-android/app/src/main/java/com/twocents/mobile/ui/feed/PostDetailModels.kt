@@ -30,7 +30,9 @@ internal data class FlatPostComment(
     val comment: PostComment,
     val depth: Int,
     val isLast: Boolean,
-    val ancestorContinuations: List<Boolean>,
+    val parent: PostComment? = null,
+    val rootUuid: String = comment.uuid,
+    val ancestorContinuations: List<Boolean> = emptyList(),
 )
 
 @Immutable

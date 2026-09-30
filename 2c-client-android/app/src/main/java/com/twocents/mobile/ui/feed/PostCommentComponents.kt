@@ -112,10 +112,12 @@ internal fun PostCommentRow(
     ownComment: Boolean,
     onDelete: () -> Unit,
     isOriginalPoster: Boolean = false,
+    moreReplyCount: Int = 0,
+    onMoreReplies: (() -> Unit)? = null,
 ) {
     val view = LocalView.current
-    val visualDepth = row.depth.coerceAtMost(5)
-    val canReply = row.depth < 5
+    // Every page shows at most five levels; deeper branches open another page.
+    val visualDepth = row.depth.coerceAtMost(CommentThreadLevels - 1)
     val comment = row.comment
     val tweetUrl = remember(comment.text) { commentTweetUrl(comment.text) }
     val displayAuthor = remember(comment, alias) { comment.author.toUserDisplay(comment.authorUuid, alias) }
@@ -143,14 +145,9 @@ internal fun PostCommentRow(
                 val color = DetailGold.copy(alpha = 0.35f)
                 val stroke = 2.dp.toPx()
                 for (level in 0 until visualDepth - 1) {
-                    // Index zero is the top-level comment's sibling state.
-                    // Top-level comments have no connector lane, so reply
-                    // continuation lanes begin at ancestor index one.
-                    val hiddenDepth = (row.depth - visualDepth).coerceAtLeast(0)
-                    val continuationIndex = hiddenDepth + level + 1
-                    if (row.ancestorContinuations.getOrNull(continuationIndex) == true) {
-                        val x = baseX + lane * level
-                        drawLine(color, Offset(x, 0f), Offset(x, size.height), stroke, StrokeCap.Butt)
+                    if (row.ancestorContinuations.getOrNull(level + 1) == true) {
+                        val ancestorX = baseX + lane * level
+                        drawLine(color, Offset(ancestorX, 0f), Offset(ancestorX, size.height), stroke, StrokeCap.Butt)
                     }
                 }
                 val x = baseX + lane * (visualDepth - 1)
@@ -212,12 +209,10 @@ internal fun PostCommentRow(
                     .padding(horizontal = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (canReply) {
-                    Box(Modifier.fillMaxHeight().width(30.dp).clip(CircleShape).clickable { AppHaptics.open(view); onReply() }, contentAlignment = Alignment.Center) {
-                        FeedCommentIcon(Modifier.size(14.dp), Color(0xFF8E8B85))
-                    }
-                    Box(Modifier.width(1.dp).height(12.dp).background(Color.White.copy(alpha = 0.12f)))
+                Box(Modifier.fillMaxHeight().width(30.dp).clip(CircleShape).clickable { AppHaptics.open(view); onReply() }, contentAlignment = Alignment.Center) {
+                    FeedCommentIcon(Modifier.size(14.dp), Color(0xFF8E8B85))
                 }
+                Box(Modifier.width(1.dp).height(12.dp).background(Color.White.copy(alpha = 0.12f)))
                 CommentVoteArrow(true, vote == 1, Modifier.fillMaxHeight().width(25.dp).clip(CircleShape).clickable { AppHaptics.toggle(view); onVote(1) })
                 Text(
                     comment.upvoteCount.toString(),
@@ -227,6 +222,23 @@ internal fun PostCommentRow(
                     style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
                 )
                 CommentVoteArrow(false, vote == -1, Modifier.fillMaxHeight().width(25.dp).clip(CircleShape).clickable { AppHaptics.toggle(view); onVote(-1) })
+            }
+        }
+        if (moreReplyCount > 0 && onMoreReplies != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 3.dp)
+                    .clickable { AppHaptics.open(view); onMoreReplies() }
+                    .padding(vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    "Show more replies ($moreReplyCount)",
+                    color = DetailGold,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text("›", color = DetailGold, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }

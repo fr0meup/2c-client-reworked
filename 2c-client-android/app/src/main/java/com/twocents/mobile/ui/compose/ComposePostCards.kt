@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -207,7 +209,7 @@ private fun ComposeSmallInput(
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
     ) {
         BasicTextField(
-            modifier = Modifier.fillMaxWidth().nativeMisspellingUnderlines(textLayout, misspellings),
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             value = value,
             onValueChange = { onValueChange(it.take(80)) },
             singleLine = true,
@@ -230,7 +232,7 @@ private fun ComposeSmallInput(
                     lineHeight = 18.sp,
                     style = TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)),
                 )
-                inner()
+                Box(Modifier.nativeMisspellingUnderlines(textLayout, misspellings)) { inner() }
                 }
             },
         )
