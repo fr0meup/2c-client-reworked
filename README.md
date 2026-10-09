@@ -12,7 +12,7 @@ The goal is a more polished Android experience: lightweight, fast, data-consciou
 
 ## Current status
 
-Latest Android release: **v0.3.0**. See the [release notes](https://github.com/fr0meup/2c-client-reworked/releases/tag/v0.3.0) for details.
+Latest Android release: **v0.3.1**. See the [release notes](https://github.com/fr0meup/2c-client-reworked/releases/tag/v0.3.1) for details.
 
 The Android client supports the functionality of the official twocents application with the current exceptions of creating transactions and budgets. Those features are not currently available to the developer in the EU, which means their behavior and API contracts cannot yet be tested or implemented reliably. They will be added as soon as access makes a correct implementation possible.
 
@@ -47,6 +47,8 @@ Do not uninstall the app when updating unless the release notes explicitly requi
 - Posts, nested comments, replies, quoting, voting, bookmarks, polls, Likert posts, links, images, GIFs, and video.
 - Deep comment threads show five nested levels at a time. **Show more replies** opens a bottom sheet with a parent-comment card; deeper branches preserve their scroll position on Back, and closing an unfinished sheet reply asks for confirmation.
 - Searchable stock tickers and tappable `$SYMBOL` references in posts and comments, with company details, price charts, and ticker-specific post and reply feeds.
+- Equity-chart posts: choose **Equity → Chart** in post options, search for a company or ticker, and attach its interactive chart directly to the post. Attachments reuse the ticker page's company information, price display, chart, timeframe controls, and About section without its discussion feeds. Charts offer 1D, 1W, 1M, 1Y, and ALL timeframes and also appear in quoted posts and native embeds; saved drafts retain the chosen ticker.
+- Equity predictions: choose **Equity → Prediction**, select a stock, enter a target price or use a percentage preset, and pick a future weekday with date shortcuts or the calendar. Prediction cards show the target, price movement, latest available price, and server-provided resolution status in posts, quotes, and embeds. Predictions can be edited before publishing and saved in drafts, including app-data backups. Chart and prediction attachments are standalone post options and cannot be combined with other attachment types.
 - Profiles, aliases, following, user activity, net-worth history, and leaderboards.
 - Notifications with direct navigation to the relevant post, comment, profile, room, or message.
 - Rooms, direct messages, replies, reactions, typing indicators, media, unread markers, custom rooms, and room discovery.

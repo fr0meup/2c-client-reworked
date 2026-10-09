@@ -143,7 +143,9 @@ internal fun PostDetailScreen(
     val sourcePost = sourceState.posts.firstOrNull { it.uuid == seedPost.uuid }
     val sourceVote = sourceState.postVotes[seedPost.uuid]
     val post = if (sourcePost != null && sourceVote != null && sourceVote != state.postVote) {
-        sourcePost
+        // Preserve authoritative detail metadata (including chart attachments) while
+        // reflecting an optimistic vote count from the originating feed.
+        (state.post ?: sourcePost).copy(upvoteCount = sourcePost.upvoteCount)
     } else {
         state.post ?: sourcePost ?: seedPost
     }

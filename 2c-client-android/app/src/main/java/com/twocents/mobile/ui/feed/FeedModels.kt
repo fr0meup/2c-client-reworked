@@ -50,6 +50,8 @@ data class FeedPostMeta(
     val totalSpent: Double = 0.0,
     val budgetCategories: List<FeedBudgetCategory> = emptyList(),
     val priceHistory: List<Double> = emptyList(),
+    val equityCharts: List<com.twocents.mobile.ui.common.EquityChartAttachment> = emptyList(),
+    val equityPrediction: com.twocents.mobile.ui.common.EquityPrediction? = null,
 )
 
 @Immutable
@@ -72,6 +74,8 @@ data class FeedPost(
     val recycleType: String
         get() = when {
             hasPoll -> "poll"
+            meta.equityCharts.isNotEmpty() -> "equity-chart"
+            meta.equityPrediction != null || postType == 11 -> "equity-prediction"
             postType == 5 -> "likert"
             postType == 7 -> "picks"
             postType == 8 -> "transaction"

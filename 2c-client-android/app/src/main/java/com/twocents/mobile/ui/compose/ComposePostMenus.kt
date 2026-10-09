@@ -1,5 +1,6 @@
 package com.twocents.mobile.ui.compose
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,10 +22,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,8 +70,13 @@ fun ComposePostOptionsMenu(
     onPoll: () -> Unit,
     onLikert: () -> Unit,
     onGif: () -> Unit,
+    onEquityChart: () -> Unit,
+    onEquityPrediction: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var equityChoicesOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(visible) { equityChoicesOpen = false }
+    BackHandler(enabled = visible && equityChoicesOpen) { equityChoicesOpen = false }
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
@@ -66,40 +84,79 @@ fun ComposePostOptionsMenu(
         exit = fadeOut(tween(150)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 3 },
     ) {
         MenuCard {
-            ComposeMenuItem(
-                icon = MenuGlyph.Images,
-                title = "Images & Video",
-                subtitle = "Attach up to 4 images or 1 video",
-                tint = if (mediaCount > 0) Gold else null,
-                trailing = when {
-                    hasVideo -> "1/1"
-                    mediaCount > 0 -> "$mediaCount/4"
-                    else -> null
-                },
-                onClick = onImages,
-            )
-            ComposeMenuItem(
-                icon = MenuGlyph.Poll,
-                title = "Poll",
-                subtitle = "Add multiple-choice voting",
-                tint = if (activeOption == ComposePostOption.Poll) Gold else null,
-                onClick = onPoll,
-            )
-            ComposeMenuItem(
-                icon = MenuGlyph.Likert,
-                title = "Likert",
-                subtitle = "1 to 5 agreement scale",
-                tint = if (activeOption == ComposePostOption.Likert) Gold else null,
-                onClick = onLikert,
-            )
-            ComposeMenuItem(
-                icon = MenuGlyph.Gif,
-                title = "GIFs",
-                subtitle = "Search or choose from saved GIFs",
-                onClick = onGif,
-            )
+            if (equityChoicesOpen) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .clickable { equityChoicesOpen = false }.padding(horizontal = 10.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back to attachments", tint = Gold, modifier = Modifier.size(18.dp))
+                    Text("Equity", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                }
+                ComposeMenuDivider()
+                ComposeMenuItem(
+                    icon = MenuGlyph.Chart,
+                    title = "Chart",
+                    subtitle = "Attach an interactive stock chart",
+                    tint = if (activeOption == ComposePostOption.EquityChart) Gold else null,
+                    onClick = onEquityChart,
+                )
+                ComposeMenuItem(
+                    icon = MenuGlyph.Target,
+                    title = "Prediction",
+                    subtitle = "Predict a stock's price by a date",
+                    tint = if (activeOption == ComposePostOption.EquityPrediction) Gold else null,
+                    onClick = onEquityPrediction,
+                )
+            } else {
+                ComposeMenuItem(
+                    icon = MenuGlyph.Images,
+                    title = "Images & Video",
+                    subtitle = "Attach up to 4 images or 1 video",
+                    tint = if (mediaCount > 0) Gold else null,
+                    trailing = when {
+                        hasVideo -> "1/1"
+                        mediaCount > 0 -> "$mediaCount/4"
+                        else -> null
+                    },
+                    onClick = onImages,
+                )
+                ComposeMenuItem(
+                    icon = MenuGlyph.Gif,
+                    title = "GIFs",
+                    subtitle = "Search or choose from saved GIFs",
+                    onClick = onGif,
+                )
+                ComposeMenuItem(
+                    icon = MenuGlyph.Poll,
+                    title = "Poll",
+                    subtitle = "Add multiple-choice voting",
+                    tint = if (activeOption == ComposePostOption.Poll) Gold else null,
+                    onClick = onPoll,
+                )
+                ComposeMenuItem(
+                    icon = MenuGlyph.Likert,
+                    title = "Likert",
+                    subtitle = "1 to 5 agreement scale",
+                    tint = if (activeOption == ComposePostOption.Likert) Gold else null,
+                    onClick = onLikert,
+                )
+                ComposeMenuDivider()
+                ComposeMenuItem(
+                    icon = MenuGlyph.Chart,
+                    title = "Equity",
+                    subtitle = "Stock chart or price prediction",
+                    tint = if (activeOption == ComposePostOption.EquityChart || activeOption == ComposePostOption.EquityPrediction) Gold else null,
+                    hasSubmenu = true,
+                    onClick = { equityChoicesOpen = true },
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun ComposeMenuDivider() {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).height(1.dp)
+        .background(Color.White.copy(alpha = .08f)))
 }
 
 @Composable
@@ -151,6 +208,7 @@ private fun MenuCard(content: @Composable () -> Unit) {
             .clip(RoundedCornerShape(16.dp))
             .background(MenuSurface)
             .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+            .heightIn(max = 360.dp).verticalScroll(rememberScrollState())
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
@@ -167,6 +225,7 @@ private fun ComposeMenuItem(
     tint: Color? = null,
     selected: Boolean = false,
     trailing: String? = null,
+    hasSubmenu: Boolean = false,
     trailingIcon: MenuGlyph? = null,
     trailingTint: Color = Color.White.copy(alpha = 0.3f),
     onTrailingClick: (() -> Unit)? = null,
@@ -198,6 +257,8 @@ private fun ComposeMenuItem(
                 Text(trailing, color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
+        if (hasSubmenu) Icon(Icons.Outlined.ChevronRight, null,
+            tint = Color.White.copy(alpha = .4f), modifier = Modifier.size(16.dp))
         if (trailingIcon != null) {
             val trailingInteraction = remember { MutableInteractionSource() }
             MenuIcon(
@@ -217,7 +278,7 @@ private fun ComposeMenuItem(
     }
 }
 
-private enum class MenuGlyph { Images, Poll, Likert, Gif, Chat, Dollar, Bug, Pin }
+private enum class MenuGlyph { Images, Poll, Likert, Gif, Chat, Dollar, Bug, Pin, Chart, Target }
 
 @Composable
 private fun MenuIcon(glyph: MenuGlyph, tint: Color, modifier: Modifier = Modifier.size(18.dp)) {
@@ -245,6 +306,20 @@ private fun MenuIcon(glyph: MenuGlyph, tint: Color, modifier: Modifier = Modifie
 
         withTransform({ scale(scale, scale, pivot = Offset.Zero) }) {
             when (glyph) {
+                MenuGlyph.Target -> {
+                    path.addOval(androidx.compose.ui.geometry.Rect(3f, 3f, 21f, 21f))
+                    path.addOval(androidx.compose.ui.geometry.Rect(8f, 8f, 16f, 16f))
+                    line(12f, 1f, 12f, 5f)
+                    line(12f, 19f, 12f, 23f)
+                    line(1f, 12f, 5f, 12f)
+                    line(19f, 12f, 23f, 12f)
+                }
+                MenuGlyph.Chart -> {
+                    line(3f, 3f, 3f, 21f)
+                    line(3f, 21f, 21f, 21f)
+                    path.moveTo(6f, 16f); path.lineTo(10f, 11f)
+                    path.lineTo(14f, 14f); path.lineTo(21f, 5f)
+                }
                 MenuGlyph.Images -> {
                     path.moveTo(21f, 12f)
                     path.lineTo(21f, 19f)

@@ -70,6 +70,10 @@ internal fun ComposePostEditorContent(
     pollLink: String,
     onPollLinkChange: (String) -> Unit,
     onRemoveOption: () -> Unit,
+    equityChart: com.twocents.mobile.ui.common.EquityChartAttachment?,
+    onChangeEquityChart: () -> Unit,
+    equityPrediction: com.twocents.mobile.ui.common.EquityPrediction?,
+    onEditEquityPrediction: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -177,6 +181,14 @@ internal fun ComposePostEditorContent(
                 )
             }
             if (activeOption == ComposePostOption.Likert) ComposeLikertCard(onRemove = onRemoveOption)
+            if (activeOption == ComposePostOption.EquityChart && equityChart != null) {
+                com.twocents.mobile.ui.common.EquityChartCard(equityChart, stateKey = "compose-chart",
+                    onChange = onChangeEquityChart, onRemove = onRemoveOption)
+            }
+            if (activeOption == ComposePostOption.EquityPrediction && equityPrediction != null) {
+                com.twocents.mobile.ui.common.EquityPredictionCard(equityPrediction,
+                    onEdit = onEditEquityPrediction, onRemove = onRemoveOption)
+            }
             Box(modifier = Modifier.fillMaxWidth().height(48.dp))
         }
     }

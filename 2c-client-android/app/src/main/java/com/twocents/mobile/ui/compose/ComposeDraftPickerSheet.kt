@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Poll
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -92,7 +93,7 @@ internal fun ComposeDraftPickerSheet(
                           Column(Modifier.padding(start = 14.dp, top = 12.dp, end = 9.dp, bottom = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    when (stored.draft.option) { ComposePostOption.Poll -> Icons.Outlined.Poll; ComposePostOption.Likert -> Icons.Outlined.Description; else -> if (mediaCount > 0) Icons.Outlined.Image else Icons.Outlined.Description },
+                                    when (stored.draft.option) { ComposePostOption.Poll -> Icons.Outlined.Poll; ComposePostOption.Likert -> Icons.Outlined.Description; ComposePostOption.EquityChart, ComposePostOption.EquityPrediction -> Icons.AutoMirrored.Outlined.ShowChart; else -> if (mediaCount > 0) Icons.Outlined.Image else Icons.Outlined.Description },
                                     null, tint = Color(0xFFC8A44D).copy(alpha = .65f), modifier = Modifier.size(15.dp),
                                 )
                                 Text(
@@ -114,6 +115,8 @@ internal fun ComposeDraftPickerSheet(
                                     when (stored.draft.option) {
                                         ComposePostOption.Poll -> add("poll")
                                         ComposePostOption.Likert -> add("likert")
+                                        ComposePostOption.EquityChart -> add("${stored.draft.equityChart?.symbol.orEmpty()} chart".trim())
+                                        ComposePostOption.EquityPrediction -> add("${stored.draft.equityPrediction?.symbol.orEmpty()} prediction".trim())
                                         else -> Unit // Image/GIF attachments are already represented by mediaCount.
                                     }
                                 }.joinToString("  ·  ")

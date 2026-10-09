@@ -156,6 +156,8 @@ internal fun FeedQuoteCard(
             },
             ensureResults = { scope.launch { controller?.ensurePollResults(quote.uuid) } },
         )
+        com.twocents.mobile.ui.common.EquityChartAttachments(quote)
+        com.twocents.mobile.ui.common.EquityPredictionAttachment(quote)
         tweetUrl?.let { TweetEmbedCard(it) }
         com.twocents.mobile.ui.common.LinkPreviewCards(quote.text, quote.meta.link)
         if (!videoUrl.isNullOrBlank()) {

@@ -50,7 +50,7 @@ import java.util.Locale
 private val TickerToken = Regex("(?<![\\w$])\\$([A-Za-z][A-Za-z0-9.\\-]{0,15})(?![\\w.\\-])")
 private val TickerQuery = Regex("[A-Za-z0-9.\\-]+")
 internal data class TickerContext(val start: Int, val query: String)
-internal data class TickerChoice(val symbol: String, val name: String, val exchange: String)
+internal data class TickerChoice(val symbol: String, val name: String, val exchange: String, val currency: String = "USD")
 
 internal fun tickerContext(text: String, cursor: Int = text.length): TickerContext? {
     val prefix = text.substring(0, cursor.coerceIn(0, text.length))
@@ -82,7 +82,7 @@ internal fun parseTickerChoices(value: Any?): List<TickerChoice> {
             ?: array.optString(index)).trim().uppercase(Locale.ROOT)
         if (!Regex("[A-Z][A-Z0-9.\\-]{0,15}").matches(symbol)) return@mapNotNull null
         TickerChoice(symbol, item?.optString("name").orEmpty().ifBlank { item?.optString("description").orEmpty().ifBlank { symbol } },
-            item?.optString("exchange").orEmpty())
+            item?.optString("exchange").orEmpty(), item?.optString("currency").orEmpty().ifBlank { "USD" })
     }.distinctBy(TickerChoice::symbol)
 }
 

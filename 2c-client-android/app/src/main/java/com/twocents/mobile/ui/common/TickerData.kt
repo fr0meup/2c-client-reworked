@@ -4,11 +4,17 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import com.twocents.mobile.AuthState
 import com.twocents.mobile.RpcApi
 import com.twocents.mobile.ui.feed.FeedPage
+import com.twocents.mobile.ui.feed.FeedPost
 import com.twocents.mobile.ui.feed.PostComment
 import com.twocents.mobile.ui.feed.parseComment
 import com.twocents.mobile.ui.feed.parseFeedPage
+import com.twocents.mobile.ui.feed.parseFeedPost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import org.json.JSONObject
 import java.time.LocalDate
 import com.twocents.mobile.data.VoteRepository
@@ -85,6 +91,12 @@ internal fun latestTradingDay(points: List<TickerPoint>): List<TickerPoint> {
 
 internal class TickerData(private val api: RpcApi, private val auth: AuthState) {
     val authUuid: String get() = auth.userUuid
+    // Fixed lock stripes coalesce identical chart/snapshot loads without an ever-growing lock map.
+    private val chartLocks = Array(16) { Mutex() }
+    private val priceLocks = Array(16) { Mutex() }
+    private val detailsLocks = Array(16) { Mutex() }
+    private val attachmentLocks = Array(16) { Mutex() }
+    private val marketRequests = Semaphore(3)
     private val detailsCache = object : LinkedHashMap<String, Pair<Long, TickerDetails>>(32, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, TickerDetails>>?) = size > 32
     }
@@ -93,6 +105,9 @@ internal class TickerData(private val api: RpcApi, private val auth: AuthState) 
     }
     private val chartCache = object : LinkedHashMap<Pair<String, TickerPeriod>, Pair<Long, List<TickerPoint>>>(16, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<String, TickerPeriod>, Pair<Long, List<TickerPoint>>>?) = size > 16
+    }
+    private val attachmentCache = object : LinkedHashMap<String, Pair<Long, FeedPost>>(32, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, FeedPost>>?) = size > 32
     }
     fun feedController(context: android.content.Context) =
         com.twocents.mobile.ui.feed.FeedController(api, auth, context = context)
@@ -103,35 +118,61 @@ internal class TickerData(private val api: RpcApi, private val auth: AuthState) 
             .put("post_uuid", comment.postUuid), auth)
     }
 
-    suspend fun details(symbol: String): TickerDetails {
-        detailsCache[symbol]?.takeIf { System.currentTimeMillis() - it.first < 60 * 60_000L }?.let { return it.second }
-        val root = api.call("/v1/info/ticker/details", JSONObject().put("ticker", symbol), auth) as? JSONObject
+    suspend fun details(symbol: String): TickerDetails = detailsLocks[(symbol.hashCode() and Int.MAX_VALUE) % detailsLocks.size].withLock {
+        synchronized(detailsCache) { detailsCache[symbol] }?.takeIf { System.currentTimeMillis() - it.first < 60 * 60_000L }?.let { return@withLock it.second }
+        val root = marketRequests.withPermit {
+            api.call("/v1/info/ticker/details", JSONObject().put("ticker", symbol), auth) as? JSONObject
+        }
         val data = root?.optJSONObject("details") ?: error("Company details unavailable")
-        return TickerDetails(data.optString("name", symbol), data.optString("exchange"),
+        TickerDetails(data.optString("name", symbol), data.optString("exchange"),
             data.optString("currency", "USD"), data.optDouble("marketCap", 0.0),
             data.optString("logoUrl").takeIf(String::isHttpUrl),
             data.optString("homepageUrl").takeIf(String::isHttpUrl), data.optString("description"))
-            .also { detailsCache[symbol] = System.currentTimeMillis() to it }
+            .also { synchronized(detailsCache) { detailsCache[symbol] = System.currentTimeMillis() to it } }
     }
 
-    suspend fun price(symbol: String): TickerPrice {
-        priceCache[symbol]?.takeIf { System.currentTimeMillis() - it.first < 20_000L }?.let { return it.second }
-        val root = api.call("/v1/info/stocks/price", JSONObject().put("ticker", symbol), auth) as? JSONObject
+    suspend fun attachments(postUuid: String, force: Boolean = false): List<EquityChartAttachment> =
+        attachmentPost(postUuid, force).meta.equityCharts
+
+    suspend fun prediction(postUuid: String, force: Boolean = false): EquityPrediction? =
+        attachmentPost(postUuid, force).meta.equityPrediction
+
+    /** Chart and prediction projections share a bounded, coalesced detail lookup; no extra discussion requests. */
+    private suspend fun attachmentPost(postUuid: String, force: Boolean): FeedPost =
+        attachmentLocks[(postUuid.hashCode() and Int.MAX_VALUE) % attachmentLocks.size].withLock {
+            if (!force) synchronized(attachmentCache) { attachmentCache[postUuid] }
+                ?.takeIf { System.currentTimeMillis() - it.first < 60_000L }?.let { return@withLock it.second }
+            val root = marketRequests.withPermit {
+                api.call("/v1/posts/get", JSONObject().put("post_uuid", postUuid), auth) as? JSONObject
+            }
+            val post = root?.optJSONObject("post")?.let(::parseFeedPost)
+                ?: error("Equity attachment post unavailable")
+            post.also { synchronized(attachmentCache) { attachmentCache[postUuid] = System.currentTimeMillis() to it } }
+        }
+
+    suspend fun price(symbol: String): TickerPrice = priceLocks[(symbol.hashCode() and Int.MAX_VALUE) % priceLocks.size].withLock {
+        synchronized(priceCache) { priceCache[symbol] }?.takeIf { System.currentTimeMillis() - it.first < 20_000L }?.let { return@withLock it.second }
+        val root = marketRequests.withPermit {
+            api.call("/v1/info/stocks/price", JSONObject().put("ticker", symbol), auth) as? JSONObject
+        }
         val snapshot = root?.optJSONObject("snapshot")
         val day = snapshot?.optJSONObject("day")
         val previous = snapshot?.optJSONObject("prevDay")
         val close = day?.numberOrNull("c") ?: snapshot?.optJSONObject("min")?.numberOrNull("c")
         val change = snapshot?.numberOrNull("todaysChange") ?: close?.let { it - (previous?.numberOrNull("c") ?: it) }
-        return TickerPrice(close, change, snapshot?.numberOrNull("todaysChangePerc"), day?.numberOrNull("v"))
-            .also { priceCache[symbol] = System.currentTimeMillis() to it }
+        TickerPrice(close, change, snapshot?.numberOrNull("todaysChangePerc"), day?.numberOrNull("v"))
+            .also { synchronized(priceCache) { priceCache[symbol] = System.currentTimeMillis() to it } }
     }
 
-    suspend fun chart(symbol: String, period: TickerPeriod): List<TickerPoint> {
+    suspend fun chart(symbol: String, period: TickerPeriod): List<TickerPoint> =
+        chartLocks[((symbol to period).hashCode() and Int.MAX_VALUE) % chartLocks.size].withLock {
         val cacheKey = symbol to period
-        chartCache[cacheKey]?.takeIf { System.currentTimeMillis() - it.first < 60_000L }?.let { return it.second }
-        val root = api.call("/v1/massive/equities/chart", JSONObject()
-            .put("ticker", symbol).put("chart", tickerChartParams(period)), auth) as? JSONObject
-        return withContext(Dispatchers.Default) {
+        synchronized(chartCache) { chartCache[cacheKey] }?.takeIf { System.currentTimeMillis() - it.first < 60_000L }?.let { return@withLock it.second }
+        val root = marketRequests.withPermit {
+            api.call("/v1/massive/equities/chart", JSONObject()
+                .put("ticker", symbol).put("chart", tickerChartParams(period)), auth) as? JSONObject
+        }
+        withContext(Dispatchers.Default) {
             val rows = root?.optJSONArray("aggregates") ?: return@withContext emptyList()
             val parsed = buildList(rows.length()) {
                 for (i in 0 until rows.length()) {
@@ -143,7 +184,7 @@ internal class TickerData(private val api: RpcApi, private val auth: AuthState) 
             // The 1D endpoint includes five calendar days to survive market closures;
             // draw the latest trading session, not a misleading five-day line.
             if (period == TickerPeriod.Day) latestTradingDay(parsed) else parsed
-        }.also { if (it.isNotEmpty()) chartCache[cacheKey] = System.currentTimeMillis() to it }
+        }.also { synchronized(chartCache) { chartCache[cacheKey] = System.currentTimeMillis() to it } }
     }
 
     suspend fun posts(symbol: String, sort: String, cursor: String?): FeedPage {

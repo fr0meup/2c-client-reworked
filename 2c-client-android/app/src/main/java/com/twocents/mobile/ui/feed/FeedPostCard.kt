@@ -238,6 +238,8 @@ internal fun FeedPostCard(
                 )
             }
 
+            com.twocents.mobile.ui.common.EquityChartAttachments(post)
+            com.twocents.mobile.ui.common.EquityPredictionAttachment(post)
             val videoUrl = post.meta.videoUrl
             // GIFs share the still-image gallery path so size, clipping, corner
             // treatment and lightbox behavior cannot drift between media types.

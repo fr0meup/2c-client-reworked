@@ -38,8 +38,8 @@ android {
         applicationId = "com.twocents.mobile.kotlin"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.3.0"
+        versionCode = 22
+        versionName = "0.3.1"
 
         // Direct APK distribution does not receive Play's ABI splits. Keep only
         // the 64-bit ARM binaries used by current Android phones, rather than
@@ -117,6 +117,8 @@ kotlin {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // Real JSON parsing in JVM regression tests; never packaged into the Android app.
+    testImplementation("org.json:json:20240303")
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.activity:activity-compose:1.12.1")

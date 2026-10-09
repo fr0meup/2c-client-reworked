@@ -7,6 +7,8 @@ enum class ComposePostOption {
     Poll,
     Likert,
     Gif,
+    EquityChart,
+    EquityPrediction,
 }
 
 data class ComposeTopic(
@@ -30,6 +32,8 @@ data class ComposePostDraft(
     val mediaUris: List<String>,
     val pollLink: String? = null,
     val quotedPost: FeedPost? = null,
+    val equityChart: com.twocents.mobile.ui.common.EquityChartAttachment? = null,
+    val equityPrediction: com.twocents.mobile.ui.common.EquityPrediction? = null,
 )
 
 val ComposeTopics = listOf(

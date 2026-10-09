@@ -43,7 +43,12 @@ private val Gold = Color(0xFFC8A44D)
 private val Muted = Color(0xFF99968E)
 
 @Composable
-internal fun TickerCompanyHeader(symbol: String, details: TickerDetails?, onClose: () -> Unit) {
+internal fun TickerCompanyHeader(
+    symbol: String,
+    details: TickerDetails?,
+    onClose: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 4.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.size(36.dp).background(Color.White.copy(alpha = .07f), CircleShape), contentAlignment = Alignment.Center) {
@@ -60,7 +65,8 @@ internal fun TickerCompanyHeader(symbol: String, details: TickerDetails?, onClos
                 details?.currency?.takeIf(String::isNotBlank)).joinToString(" · ")
             Text(meta, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+        if (trailing != null) trailing()
+        else if (onClose != null) Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
             Icon(Icons.Outlined.Close, "Close ticker", tint = Color.White.copy(alpha = .64f), modifier = Modifier.size(18.dp))
         }
     }
@@ -166,7 +172,7 @@ private fun TickerAxisPlaceholder() {
 }
 
 @Composable
-private fun TickerChartSkeleton(modifier: Modifier = Modifier) {
+internal fun TickerChartSkeleton(modifier: Modifier = Modifier) {
     Canvas(modifier) {
         for (fraction in listOf(0f, .5f, 1f)) {
             val y = (size.height - 1.dp.toPx()) * fraction

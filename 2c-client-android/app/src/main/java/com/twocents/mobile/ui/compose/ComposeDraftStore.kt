@@ -13,6 +13,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import com.twocents.mobile.ui.common.toChartJson
+import com.twocents.mobile.ui.common.parseEquityChart
+import com.twocents.mobile.ui.common.parseEquityPrediction
+import com.twocents.mobile.ui.common.toPredictionJson
 
 internal data class StoredComposeDraft(
     val id: String,
@@ -102,7 +106,7 @@ internal class ComposeDraftStore(context: Context) {
                     val root = array.optJSONObject(index) ?: continue
                     val id = root.optString("id")
                     if (id.isBlank()) continue
-                    val draft = root.optJSONObject("draft")?.toDraft() ?: continue
+                    val draft = root.optJSONObject("draft")?.toComposeDraft() ?: continue
                     add(StoredComposeDraft(id, root.optLong("savedAt"), draft))
                 }
             }.sortedByDescending(StoredComposeDraft::savedAt)
@@ -117,7 +121,7 @@ internal class ComposeDraftStore(context: Context) {
                 JSONObject()
                     .put("id", stored.id)
                     .put("savedAt", stored.savedAt)
-                    .put("draft", stored.draft.toJson()),
+                    .put("draft", stored.draft.toDraftJson()),
             )
         }
         val temporary = File(directory, "drafts.tmp")
@@ -129,7 +133,7 @@ internal class ComposeDraftStore(context: Context) {
     }
 }
 
-private fun ComposePostDraft.toJson() = JSONObject()
+internal fun ComposePostDraft.toDraftJson() = JSONObject()
     .put("title", title)
     .put("body", body)
     .put("topic", topic)
@@ -137,9 +141,11 @@ private fun ComposePostDraft.toJson() = JSONObject()
     .put("pollOptions", JSONArray(pollOptions))
     .put("mediaUris", JSONArray(mediaUris))
     .put("pollLink", pollLink)
+    .apply { equityChart?.let { put("equityChart", it.toChartJson()) } }
+    .apply { equityPrediction?.let { put("equityPrediction", it.toPredictionJson()) } }
     .apply { quotedPost?.let { put("quotedPost", it.toDraftPostJson()) } }
 
-private fun JSONObject.toDraft(): ComposePostDraft {
+internal fun JSONObject.toComposeDraft(): ComposePostDraft {
     fun strings(key: String): List<String> = optJSONArray(key)?.let { array ->
         (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) }
     }.orEmpty()
@@ -152,6 +158,8 @@ private fun JSONObject.toDraft(): ComposePostDraft {
         mediaUris = strings("mediaUris"),
         pollLink = optString("pollLink").takeIf { it.isNotBlank() && it != "null" },
         quotedPost = optJSONObject("quotedPost")?.let(::parseFeedPost),
+        equityChart = parseEquityChart(optJSONObject("equityChart")),
+        equityPrediction = parseEquityPrediction(optJSONObject("equityPrediction")),
     )
 }
 
@@ -160,6 +168,8 @@ private fun FeedPost.toDraftPostJson(): JSONObject {
         .put("platform", meta.platform)
         .put("poll", JSONArray(meta.poll))
         .put("image_urls", JSONArray(meta.images))
+    if (meta.equityCharts.isNotEmpty()) postMeta.put("tickers", JSONArray(meta.equityCharts.map { it.toChartJson() }))
+    meta.equityPrediction?.let { postMeta.put("stockPrediction", it.toPredictionJson()) }
     meta.videoUrl?.let { postMeta.put("video_url", it) }
     meta.link?.let { postMeta.put("link", it) }
     meta.giphyUrl?.let { postMeta.put("giphy_url", it) }

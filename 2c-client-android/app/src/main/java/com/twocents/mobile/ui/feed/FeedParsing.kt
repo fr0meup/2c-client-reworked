@@ -105,6 +105,8 @@ internal fun parseFeedPost(root: JSONObject, depth: Int = 0): FeedPost? {
         ),
         meta = FeedPostMeta(
             platform = meta?.string("platform"),
+            equityCharts = com.twocents.mobile.ui.common.parseEquityCharts(meta?.opt("tickers"), chartPost = postType == 6),
+            equityPrediction = com.twocents.mobile.ui.common.parseEquityPrediction(meta?.objectValue("stockPrediction")),
             images = images,
             mediaType = meta?.string("media_type") ?: videoUrl?.let { "video" },
             videoUrl = videoUrl,

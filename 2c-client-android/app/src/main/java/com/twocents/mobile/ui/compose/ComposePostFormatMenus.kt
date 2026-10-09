@@ -102,6 +102,8 @@ internal fun ComposePostFormatMenus(
     onPoll: () -> Unit,
     onLikert: () -> Unit,
     onGif: () -> Unit,
+    onEquityChart: () -> Unit,
+    onEquityPrediction: () -> Unit,
     onTopic: (String) -> Unit,
     onPin: (String) -> Unit,
     menuBottomPadding: androidx.compose.ui.unit.Dp,
@@ -118,6 +120,8 @@ internal fun ComposePostFormatMenus(
             onPoll = onPoll,
             onLikert = onLikert,
             onGif = onGif,
+            onEquityChart = onEquityChart,
+            onEquityPrediction = onEquityPrediction,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 14.dp, bottom = menuBottomPadding),
@@ -134,4 +138,3 @@ internal fun ComposePostFormatMenus(
         )
     }
 }
-

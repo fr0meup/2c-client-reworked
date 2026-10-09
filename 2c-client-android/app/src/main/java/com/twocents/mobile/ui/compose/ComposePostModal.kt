@@ -118,6 +118,8 @@ fun ComposePostModal(
     var bodyTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var bodyFocused by remember { mutableStateOf(false) }
     var gifPickerOpen by remember { mutableStateOf(false) }
+    var equityPickerOpen by remember { mutableStateOf(false) }
+    var predictionPickerOpen by remember { mutableStateOf(false) }
     var draftsOpen by remember { mutableStateOf(false) }
     val bodyFocusRequester = remember { FocusRequester() }
     val latestOnDismiss = rememberUpdatedState(onDismiss)
@@ -137,6 +139,8 @@ fun ComposePostModal(
     var activeOption by remember { mutableStateOf<ComposePostOption?>(null) }
     var pollOptions by remember { mutableStateOf(listOf("", "")) }
     var pollLink by remember { mutableStateOf("") }
+    var equityChart by remember { mutableStateOf<com.twocents.mobile.ui.common.EquityChartAttachment?>(null) }
+    var equityPrediction by remember { mutableStateOf<com.twocents.mobile.ui.common.EquityPrediction?>(null) }
     var mediaUris by remember { mutableStateOf(emptyList<String>()) }
     var draftQuotedPost by remember { mutableStateOf(quotedPost) }
     var optionsOpen by remember { mutableStateOf(false) }
@@ -216,6 +220,10 @@ fun ComposePostModal(
             activeOption = null
             pollOptions = listOf("", "")
             pollLink = ""
+            equityChart = null
+            equityPickerOpen = false
+            equityPrediction = null
+            predictionPickerOpen = false
             mediaUris = emptyList()
             draftQuotedPost = quotedPost
             loadedDraftId = null
@@ -284,7 +292,8 @@ fun ComposePostModal(
     }
 
     val hasSelection = body.selection.start != body.selection.end
-    val canPost = hasDraftContent
+    val canPost = hasDraftContent && (activeOption != ComposePostOption.EquityChart || equityChart != null) &&
+        (activeOption != ComposePostOption.EquityPrediction || equityPrediction != null)
     val hasVideoSelection = remember(mediaUris) {
         mediaUris.any { rawUri ->
             context.contentResolver.getType(android.net.Uri.parse(rawUri))?.startsWith("video/") == true
@@ -308,6 +317,8 @@ fun ComposePostModal(
                     title = title.trim(), body = composeBodyToMarkdown(body.text, styleRanges).trim(),
                     topic = topic, option = activeOption, pollOptions = pollOptions,
                     mediaUris = mediaUris, pollLink = pollLink, quotedPost = draftQuotedPost,
+                    equityChart = equityChart,
+                    equityPrediction = equityPrediction,
                 ),
                 loadedDraftId,
             )
@@ -333,6 +344,8 @@ fun ComposePostModal(
                         body = composeBodyToMarkdown(body.text, styleRanges).trim().take(5_000).ifBlank { "\u200B" },
                         topic = topic, option = activeOption, pollOptions = pollOptions,
                         mediaUris = mediaUris, pollLink = pollLink, quotedPost = draftQuotedPost,
+                        equityChart = equityChart,
+                        equityPrediction = equityPrediction,
                     ),
                 )
             }
@@ -484,7 +497,15 @@ fun ComposePostModal(
                         onPollOptionsChange = { pollOptions = it },
                         pollLink = pollLink,
                         onPollLinkChange = { value -> pollLink = value; if (value.isNotBlank()) mediaUris = emptyList() },
-                        onRemoveOption = { activeOption = null },
+                        onRemoveOption = { activeOption = null; equityChart = null; equityPrediction = null },
+                        equityChart = equityChart,
+                        onChangeEquityChart = {
+                            keyboardController?.hide(); focusManager.clearFocus(); equityPickerOpen = true
+                        },
+                        equityPrediction = equityPrediction,
+                        onEditEquityPrediction = {
+                            keyboardController?.hide(); focusManager.clearFocus(); predictionPickerOpen = true
+                        },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                     ComposePostToolbar(
@@ -558,24 +579,55 @@ fun ComposePostModal(
                         pinnedTopic = pinnedTopic,
                         mediaCount = mediaUris.size,
                         hasVideo = hasVideoSelection,
-                        onImages = { mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+                        onImages = {
+                            if (equityChart != null || equityPrediction != null) AppToast.error("Remove the equity attachment before adding media")
+                            else mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        },
                         onPoll = {
                             val nextOption = if (activeOption == ComposePostOption.Poll) null else ComposePostOption.Poll
                             if (nextOption == null) { mediaUris = emptyList(); pollLink = "" }
                             activeOption = nextOption
+                            equityChart = null
+                            equityPrediction = null
                             optionsOpen = false
                         },
                         onLikert = {
                             val nextOption = if (activeOption == ComposePostOption.Likert) null else ComposePostOption.Likert
                             if (nextOption != null) mediaUris = emptyList()
                             activeOption = nextOption
+                            equityChart = null
+                            equityPrediction = null
                             optionsOpen = false
                         },
                         onGif = {
+                            if (equityChart != null || equityPrediction != null) { AppToast.error("Remove the equity attachment before adding a GIF"); return@ComposePostFormatMenus }
                             optionsOpen = false
                             keyboardController?.hide()
                             focusManager.clearFocus()
                             gifPickerOpen = true
+                        },
+                        onEquityChart = {
+                            optionsOpen = false
+                            // Only the standalone type-6 contract is documented; never silently discard another attachment.
+                            if (mediaUris.isNotEmpty() || draftQuotedPost != null ||
+                                (activeOption != null && activeOption != ComposePostOption.EquityChart)) {
+                                AppToast.error("Remove other attachments before adding an equity chart")
+                            } else {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                equityPickerOpen = true
+                            }
+                        },
+                        onEquityPrediction = {
+                            optionsOpen = false
+                            if (mediaUris.isNotEmpty() || draftQuotedPost != null ||
+                                (activeOption != null && activeOption != ComposePostOption.EquityPrediction)) {
+                                AppToast.error("Remove other attachments before adding an equity prediction")
+                            } else {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                predictionPickerOpen = true
+                            }
                         },
                         onTopic = { topic = it; topicOpen = false },
                         onPin = { pinnedTopic = it },
@@ -619,6 +671,8 @@ fun ComposePostModal(
             activeOption = draft.option
             pollOptions = draft.pollOptions.ifEmpty { listOf("", "") }
             pollLink = draft.pollLink.orEmpty()
+            equityChart = draft.equityChart
+            equityPrediction = draft.equityPrediction
             mediaUris = draft.mediaUris
             draftQuotedPost = draft.quotedPost
             loadedDraftId = stored.id
@@ -635,6 +689,26 @@ fun ComposePostModal(
                 draftsCount = storedDrafts.size
                 if (loadedDraftId == stored.id) loadedDraftId = null
             }
+        },
+    )
+    if (mounted && equityPickerOpen) EquityChartPickerSheet(
+        mentionApi, mentionAuth,
+        onDismiss = { equityPickerOpen = false },
+        onSelect = { chart ->
+            equityChart = chart
+            activeOption = ComposePostOption.EquityChart
+            pollLink = ""
+            equityPickerOpen = false
+        },
+    )
+    if (mounted && predictionPickerOpen) EquityPredictionSheet(
+        mentionApi, mentionAuth, equityPrediction,
+        onDismiss = { predictionPickerOpen = false },
+        onAdd = { prediction ->
+            equityPrediction = prediction
+            activeOption = ComposePostOption.EquityPrediction
+            pollLink = ""
+            predictionPickerOpen = false
         },
     )
 }

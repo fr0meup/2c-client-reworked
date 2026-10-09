@@ -13,6 +13,9 @@ import com.twocents.mobile.data.VoteRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.CancellationException
+import com.twocents.mobile.ui.common.toChartJson
+import com.twocents.mobile.ui.common.toPredictionRequest
+import com.twocents.mobile.ui.common.toPredictionJson
 
 private data class UploadedComposeMedia(
     val publicUrl: String,
@@ -26,24 +29,19 @@ suspend fun createComposePost(
     draft: ComposePostDraft,
     context: Context,
 ): FeedPost? {
+    validateComposeChart(draft)
+    validateComposePrediction(draft)
     val uploadedMedia = uploadComposeMedia(api, auth, context, draft.mediaUris)
 
-    val postType = when {
-        // Official clients identify a quote by type 3 even when it carries media.
-        draft.quotedPost != null -> 3
-        draft.option == ComposePostOption.Poll -> 2
-        uploadedMedia.any { it.isVideo } -> 10
-        uploadedMedia.isNotEmpty() -> 4
-        draft.option == ComposePostOption.Likert -> 5
-        else -> 0
-    }
+    val postType = composePostType(draft, hasVideo = uploadedMedia.any { it.isVideo }, hasImages = uploadedMedia.isNotEmpty())
     val mentioned = com.twocents.mobile.ui.common.officialMentionText(draft.body, api, auth)
     val meta = JSONObject()
         .put("mentions", mentioned.metadata)
         .put("version", 1)
         .put("platform", "android")
-    com.twocents.mobile.ui.common.tickerSymbols(mentioned.text).takeIf(List<String>::isNotEmpty)
-        ?.let { meta.put("tickers", JSONArray(it)) }
+    val tickers = com.twocents.mobile.ui.common.composeTickerMetadata(mentioned.text, draft.equityChart)
+    if (tickers.length() > 0) meta.put("tickers", tickers)
+    draft.equityPrediction?.let { meta.put("stockPrediction", it.toPredictionRequest()) }
 
     if (draft.option == ComposePostOption.Poll) {
         meta.put("poll", JSONArray(draft.pollOptions.filter { it.isNotBlank() }))
@@ -107,6 +105,10 @@ private fun FeedPost.toQuoteJson(): JSONObject {
         .put("version", 1)
         .put("platform", meta.platform)
         .put("poll", JSONArray(meta.poll))
+    if (meta.equityCharts.isNotEmpty()) postMeta.put("tickers", JSONArray(meta.equityCharts.map {
+        it.toChartJson()
+    }))
+    meta.equityPrediction?.let { postMeta.put("stockPrediction", it.toPredictionJson()) }
     if (meta.images.isNotEmpty()) {
         postMeta.put("src", meta.images.first())
         postMeta.put("image_url", meta.images.first())
